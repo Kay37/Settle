@@ -27,9 +27,11 @@ import { learnFromCorrection } from './lib/learn'
 import { loadSettings, saveSettings, type Settings } from './lib/settings'
 import { createRecognizer, speechSupported } from './lib/speech'
 import { peopleRadar, staleLabel } from './lib/peopleRadar'
+import { personDraft, personMessage } from './lib/personDraft'
 import { previewDraft } from './lib/preview'
 import { exportJson, loadState, saveState, uid } from './lib/storage'
-import { fromSyncCode, toSyncCode } from './lib/syncCode'
+import { fromSyncCode, mergeSyncState, toSyncCode } from './lib/syncCode'
+import { staleDays, staleSweep } from './lib/staleSweep'
 import './index.css'
 
 type View = 'brief' | 'all' | 'ask'
@@ -118,6 +120,7 @@ export default function App() {
   const recognizerRef = useRef<ReturnType<typeof createRecognizer>>(null)
   const interimRef = useRef('')
   const baseDraftRef = useRef('')
+  const dumpShellRef = useRef<HTMLElement>(null)
 
   const hour = new Date().getHours()
   const session = greetingForHour(hour)
@@ -226,6 +229,24 @@ export default function App() {
   )
 
   const radarLoops = useMemo(() => peopleRadar(thoughts), [thoughts])
+
+  const staleItems = useMemo(() => staleSweep(thoughts, 7, 3), [thoughts])
+
+  function draftReachOut(person: string, thought: Thought) {
+    setDraft(personDraft(person, thought))
+    dumpShellRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    flash(`Draft ready for ${person}`)
+  }
+
+  async function copyReachOut(person: string, thought: Thought) {
+    const msg = personMessage(person, thought)
+    try {
+      await navigator.clipboard.writeText(msg)
+      flash('Message copied')
+    } catch {
+      flash(msg)
+    }
+  }
 
   function flash(message: string) {
     setToast(message)
@@ -398,17 +419,6 @@ export default function App() {
     reader.readAsText(file)
   }
 
-  async function copyShortcutsUrl() {
-    const base = window.location.origin + window.location.pathname
-    const sample = `${base}?dump=buy%20milk%0Atext%20Sam&unload=1`
-    try {
-      await navigator.clipboard.writeText(sample)
-      flash('Shortcuts sample URL copied')
-    } catch {
-      flash(sample)
-    }
-  }
-
   async function copyBrief() {
     const lines = [
       'Settle — next 3',
@@ -458,7 +468,7 @@ export default function App() {
         <p className="session">{session}</p>
       </header>
 
-      <section className="dump-shell" aria-label="Dump box">
+      <section className="dump-shell" aria-label="Dump box" ref={dumpShellRef}>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -582,6 +592,46 @@ export default function App() {
               </button>
             </div>
 
+            {staleItems.length > 0 && (
+              <div className="stale-section" aria-label="Stale sweep">
+                <div className="radar-head">
+                  <h3>Stale sweep</h3>
+                  <p>Open longer than a week — decide or done</p>
+                </div>
+                <div className="stale-list">
+                  {staleItems.map((t) => (
+                    <div key={t.id} className="stale-card">
+                      <div className="stale-top">
+                        <span className={`cat-pill ${t.category}`}>
+                          {labelFor(t.category)}
+                        </span>
+                        <span className="radar-stale">
+                          {staleLabel(staleDays(t.createdAt))}
+                        </span>
+                      </div>
+                      <p className="radar-action">{t.nextAction || t.title}</p>
+                      <div className="radar-actions">
+                        <button
+                          type="button"
+                          className="done-mini"
+                          onClick={() => updateThought(t.id, { status: 'done' })}
+                        >
+                          Done
+                        </button>
+                        <button
+                          type="button"
+                          className="done-mini"
+                          onClick={() => snooze(t.id, 'tonight')}
+                        >
+                          Tonight
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {radarLoops.length > 0 && (
               <div className="radar-section" aria-label="People radar">
                 <div className="radar-head">
@@ -618,6 +668,20 @@ export default function App() {
                         )}
                       </div>
                       <div className="radar-actions">
+                        <button
+                          type="button"
+                          className="done-mini"
+                          onClick={() => draftReachOut(loop.person, loop.top)}
+                        >
+                          Draft
+                        </button>
+                        <button
+                          type="button"
+                          className="done-mini"
+                          onClick={() => copyReachOut(loop.person, loop.top)}
+                        >
+                          Copy
+                        </button>
                         <button
                           type="button"
                           className="done-mini"
@@ -742,9 +806,9 @@ export default function App() {
       <footer className="footer-bar">
         <span>On-device · Add to Home Screen</span>
         <div className="footer-actions">
-          <button type="button" className="btn-ghost" onClick={copyShortcutsUrl}>
+          <a className="btn-ghost" href="/shortcuts">
             Shortcuts
-          </button>
+          </a>
           <button type="button" className="btn-ghost" onClick={downloadBackup}>
             Export
           </button>
@@ -811,6 +875,7 @@ function SettingsModal({
   onFlash: (message: string) => void
 }) {
   const [syncPaste, setSyncPaste] = useState('')
+  const [syncReplace, setSyncReplace] = useState(false)
 
   async function copySyncCode() {
     const code = toSyncCode({ version: 2, thoughts, learned })
@@ -828,9 +893,15 @@ function SettingsModal({
       onFlash('Invalid sync code')
       return
     }
-    onImport(parsed)
+    const local = { version: 2 as const, thoughts, learned }
+    const next = syncReplace ? parsed : mergeSyncState(local, parsed)
+    onImport(next)
     setSyncPaste('')
-    onFlash(`Synced ${parsed.thoughts.length} thoughts`)
+    onFlash(
+      syncReplace
+        ? `Replaced with ${parsed.thoughts.length} thoughts`
+        : `Merged — ${next.thoughts.length} thoughts total`,
+    )
     onClose()
   }
 
@@ -895,7 +966,7 @@ function SettingsModal({
           <input
             type="password"
             autoComplete="off"
-            placeholder="optional"
+            placeholder="FILING_SECRET if set on Vercel"
             value={settings.filingToken}
             onChange={(e) =>
               onChange({ ...settings, filingToken: e.target.value })
@@ -905,7 +976,10 @@ function SettingsModal({
 
         <div className="shortcuts-help">
           <h3>iOS Shortcuts</h3>
-          <p>Ask for Text / Dictate → Open URLs:</p>
+          <p>
+            Full setup with QR code:{' '}
+            <a href="/shortcuts">/shortcuts</a>
+          </p>
           <code>
             {typeof window !== 'undefined'
               ? `${window.location.origin}/?dump=[text]&unload=1`
@@ -916,9 +990,17 @@ function SettingsModal({
         <div className="sync-section">
           <h3>Sync phone ↔ PC</h3>
           <p>
-            Copy a one-time code here, paste it on your other device. Replaces
-            that device&apos;s data.
+            Copy a code on one device, paste on the other. Default merges both
+            sides — newer edits win on conflicts.
           </p>
+          <label className="toggle-row sync-replace">
+            <span>Replace all data (don&apos;t merge)</span>
+            <input
+              type="checkbox"
+              checked={syncReplace}
+              onChange={(e) => setSyncReplace(e.target.checked)}
+            />
+          </label>
           <div className="sync-actions">
             <button type="button" className="btn-ghost light" onClick={copySyncCode}>
               Copy sync code

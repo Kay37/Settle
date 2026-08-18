@@ -29,7 +29,10 @@ npm run build
 2. Framework: **Vite**. Root: `.`
 3. Deploy → stable URL. iPhone: Safari → **Share → Add to Home Screen**.
 
-Optional: add **`OPENAI_API_KEY`** in Vercel project settings, then enable **Use smart filing** and tap **Use built-in /api/file** in Settings.
+Optional env vars on Vercel:
+
+- **`OPENAI_API_KEY`** — smarter filing via GPT-4o-mini
+- **`FILING_SECRET`** — require matching Bearer token in Settings (rate-limited to 30 req/min)
 
 Data stays in the browser (`localStorage`). The Vercel URL is just the app shell.
 
@@ -44,6 +47,8 @@ Data stays in the browser (`localStorage`). The Vercel URL is just the app shell
 **Sync phone ↔ PC:** Settings → copy sync code on one device, paste on the other.
 
 ## iOS Shortcuts
+
+Setup guide with QR code: **`/shortcuts`** on your live host.
 
 ```
 https://YOUR-HOST/?dump=YOUR_TEXT&unload=1

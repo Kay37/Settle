@@ -886,6 +886,104 @@ button {
   font-family: ui-monospace, monospace;
 }
 
+.stale-section {
+  margin-top: 1.15rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.stale-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.stale-card {
+  padding: 0.7rem 0.75rem;
+  border-radius: 14px;
+  background: rgba(212, 162, 76, 0.1);
+  border: 1px solid rgba(212, 162, 76, 0.2);
+}
+
+.stale-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sync-replace {
+  margin: 0.55rem 0 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  background: rgba(27, 61, 47, 0.05);
+}
+
+.shortcuts-page .shortcuts-panel {
+  margin-top: 0.5rem;
+}
+
+.shortcuts-card {
+  background: var(--cream);
+  border-radius: 20px;
+  padding: 1.1rem 1rem;
+  box-shadow: var(--shadow);
+}
+
+.shortcuts-url {
+  display: block;
+  margin: 0.5rem 0 1rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(27, 61, 47, 0.08);
+  font-size: 0.82rem;
+  word-break: break-all;
+  font-weight: 600;
+}
+
+.qr-wrap {
+  text-align: center;
+  margin: 0.75rem 0 1rem;
+}
+
+.qr-wrap img {
+  border-radius: 14px;
+  background: var(--cream);
+  padding: 0.5rem;
+}
+
+.shortcuts-steps {
+  margin: 0.75rem 0 1rem;
+  padding-left: 1.2rem;
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+.shortcuts-steps li {
+  margin-bottom: 0.35rem;
+}
+
+.shortcuts-back {
+  text-align: center;
+  margin-top: 1rem;
+}
+
+.shortcuts-back a {
+  color: var(--sand);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.shortcuts-back a:hover {
+  text-decoration: underline;
+}
+
+.footer-actions a.btn-ghost {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
 @keyframes rise {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }

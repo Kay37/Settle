@@ -1,11 +1,26 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import type { Category } from '../src/types'
 import { fileLocally } from '../src/lib/fileThoughts'
+import { allowRequest, clientKey } from './_rateLimit'
 
 const VALID: Category[] = ['do', 'people', 'think', 'worry', 'later', 'note']
 
 function isCategory(v: unknown): v is Category {
   return typeof v === 'string' && (VALID as string[]).includes(v)
+}
+
+function authHeader(req: VercelRequest): string {
+  const raw = req.headers.authorization
+  return typeof raw === 'string' ? raw : ''
+}
+
+function checkSecret(req: VercelRequest): boolean {
+  const secret = process.env.FILING_SECRET?.trim()
+  if (!secret) return true
+  const header = authHeader(req)
+  if (header === `Bearer ${secret}`) return true
+  const alt = req.headers['x-filing-secret']
+  return alt === secret
 }
 
 async function fileWithOpenAI(chunks: string[], apiKey: string) {
@@ -60,9 +75,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'POST only' })
   }
 
+  if (!allowRequest(clientKey(req))) {
+    return res.status(429).json({ error: 'Too many requests — try again in a minute' })
+  }
+
+  if (!checkSecret(req)) {
+    return res.status(401).json({ error: 'Unauthorized — set Bearer token to FILING_SECRET' })
+  }
+
   const chunks = (req.body as { chunks?: unknown })?.chunks
   if (!Array.isArray(chunks) || !chunks.every((c) => typeof c === 'string')) {
     return res.status(400).json({ error: 'chunks: string[] required' })
+  }
+
+  if (chunks.length > 40) {
+    return res.status(400).json({ error: 'Max 40 chunks per request' })
   }
 
   const fallback = fileLocally(chunks)
