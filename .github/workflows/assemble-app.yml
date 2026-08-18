@@ -1,0 +1,23 @@
+name: assemble-app
+on:
+  push:
+    branches:
+      - cursor/p3-insights-share-e0a6
+jobs:
+  assemble:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble App.tsx
+        run: python3 scripts/assemble_app.py
+      - name: Commit assembled App.tsx
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.tsx
+          git diff --cached --quiet && echo "no change" && exit 0
+          git commit -m "Wire up insights, share, and project hint UX in App" -m "Integrate gentle insights, Web Share buttons, mind-changed re-file prompts, and prominent Same project? placement on Today and All."
+          git push
