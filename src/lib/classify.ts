@@ -163,8 +163,8 @@ export function greetingForHour(hour: number): string {
 export function briefIntro(openCount: number): string {
   if (openCount === 0) return 'Your head is clear. Dump anything that shows up.'
   if (openCount === 1) return 'One open loop. Finish it or park it.'
-  if (openCount < 5) return openCount + ' open loops — pick a few, ignore the rest.'
-  return openCount + ' open loops. Don't organize — just pick what's next.'
+  if (openCount < 5) return `${openCount} open loops — pick a few, ignore the rest.`
+  return `${openCount} open loops. Don't organize — just pick what's next.`
 }
 
 export function dumpFromLocation(search: string, hash: string): {
