@@ -26,7 +26,10 @@ import { fileLocally, fileWithEndpoint } from './lib/fileThoughts'
 import { learnFromCorrection } from './lib/learn'
 import { loadSettings, saveSettings, type Settings } from './lib/settings'
 import { createRecognizer, speechSupported } from './lib/speech'
+import { peopleRadar, staleLabel } from './lib/peopleRadar'
+import { previewDraft } from './lib/preview'
 import { exportJson, loadState, saveState, uid } from './lib/storage'
+import { fromSyncCode, toSyncCode } from './lib/syncCode'
 import './index.css'
 
 type View = 'brief' | 'all' | 'ask'
@@ -216,6 +219,13 @@ export default function App() {
     () => searchThoughts(thoughts, ask),
     [thoughts, ask],
   )
+
+  const draftPreview = useMemo(
+    () => (draft.trim() ? previewDraft(draft, learned) : []),
+    [draft, learned],
+  )
+
+  const radarLoops = useMemo(() => peopleRadar(thoughts), [thoughts])
 
   function flash(message: string) {
     setToast(message)
@@ -462,6 +472,26 @@ export default function App() {
           aria-label="Mental clutter dump"
           disabled={filing}
         />
+        {draftPreview.length > 0 && (
+          <div className="preview-row" aria-label="Filing preview">
+            {draftPreview.map((item, i) => (
+              <span
+                key={`${i}-${item.text.slice(0, 24)}`}
+                className={`preview-chip ${item.category}`}
+                title={item.text}
+              >
+                <span className="preview-cat">{labelFor(item.category)}</span>
+                <span className="preview-title">{item.title}</span>
+                {item.person && (
+                  <span className="preview-meta">{item.person}</span>
+                )}
+                {item.dueLabel && (
+                  <span className="preview-meta due">{item.dueLabel}</span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="dump-actions">
           <button
             type="button"
@@ -551,6 +581,58 @@ export default function App() {
                 Copy next 3
               </button>
             </div>
+
+            {radarLoops.length > 0 && (
+              <div className="radar-section" aria-label="People radar">
+                <div className="radar-head">
+                  <h3>People radar</h3>
+                  <p>Open loops — stalest first</p>
+                </div>
+                <div className="radar-list">
+                  {radarLoops.slice(0, 6).map((loop) => (
+                    <div
+                      key={loop.person}
+                      className={`radar-card${loop.overdue ? ' is-overdue' : ''}`}
+                    >
+                      <div className="radar-top">
+                        <span className="radar-person">{loop.person}</span>
+                        <span className="radar-stale">
+                          {staleLabel(loop.staleDays)}
+                        </span>
+                      </div>
+                      <p className="radar-action">
+                        {loop.top.nextAction || loop.top.title}
+                      </p>
+                      <div className="radar-meta">
+                        {loop.top.dueAt && (
+                          <span
+                            className={`chip ${loop.overdue ? 'overdue' : 'due'}`}
+                          >
+                            {dueLabel(loop.top.dueAt)}
+                          </span>
+                        )}
+                        {loop.thoughts.length > 1 && (
+                          <span className="thought-meta">
+                            +{loop.thoughts.length - 1} more
+                          </span>
+                        )}
+                      </div>
+                      <div className="radar-actions">
+                        <button
+                          type="button"
+                          className="done-mini"
+                          onClick={() =>
+                            updateThought(loop.top.id, { status: 'done' })
+                          }
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="brief-sections">
               <BriefSection title="Do next" items={briefBuckets.do} empty="No errands filed yet." {...rowProps} />
@@ -696,8 +778,15 @@ export default function App() {
       {settingsOpen && (
         <SettingsModal
           settings={settings}
+          thoughts={thoughts}
+          learned={learned}
+          onImport={(next) => {
+            setThoughts(next.thoughts)
+            setLearned(next.learned)
+          }}
           onClose={() => setSettingsOpen(false)}
           onChange={setSettings}
+          onFlash={flash}
         />
       )}
     </div>
@@ -706,13 +795,45 @@ export default function App() {
 
 function SettingsModal({
   settings,
+  thoughts,
+  learned,
   onChange,
+  onImport,
   onClose,
+  onFlash,
 }: {
   settings: Settings
+  thoughts: Thought[]
+  learned: LearnedRule[]
   onChange: (s: Settings) => void
+  onImport: (state: { thoughts: Thought[]; learned: LearnedRule[] }) => void
   onClose: () => void
+  onFlash: (message: string) => void
 }) {
+  const [syncPaste, setSyncPaste] = useState('')
+
+  async function copySyncCode() {
+    const code = toSyncCode({ version: 2, thoughts, learned })
+    try {
+      await navigator.clipboard.writeText(code)
+      onFlash('Sync code copied — paste on your other device')
+    } catch {
+      onFlash('Could not copy sync code')
+    }
+  }
+
+  function applySyncCode() {
+    const parsed = fromSyncCode(syncPaste)
+    if (!parsed) {
+      onFlash('Invalid sync code')
+      return
+    }
+    onImport(parsed)
+    setSyncPaste('')
+    onFlash(`Synced ${parsed.thoughts.length} thoughts`)
+    onClose()
+  }
+
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <div
@@ -770,6 +891,37 @@ function SettingsModal({
               ? `${window.location.origin}/?dump=[text]&unload=1`
               : '/?dump=[text]&unload=1'}
           </code>
+        </div>
+
+        <div className="sync-section">
+          <h3>Sync phone ↔ PC</h3>
+          <p>
+            Copy a one-time code here, paste it on your other device. Replaces
+            that device&apos;s data.
+          </p>
+          <div className="sync-actions">
+            <button type="button" className="btn-ghost light" onClick={copySyncCode}>
+              Copy sync code
+            </button>
+          </div>
+          <label className="field">
+            <span>Paste sync code from another device</span>
+            <textarea
+              className="sync-textarea"
+              rows={3}
+              value={syncPaste}
+              onChange={(e) => setSyncPaste(e.target.value)}
+              placeholder="Paste the long code here…"
+            />
+          </label>
+          <button
+            type="button"
+            className="btn-ghost light"
+            disabled={!syncPaste.trim()}
+            onClick={applySyncCode}
+          >
+            Apply sync code
+          </button>
         </div>
 
         <button type="button" className="btn-primary" onClick={onClose}>

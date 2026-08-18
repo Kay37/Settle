@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:classify": "tsx src/lib/classify.selftest.ts"
+    "test:classify": "tsx src/lib/classify.selftest.ts",
+    "test:features": "tsx src/lib/features.selftest.ts",
+    "test": "npm run test:classify && npm run test:features"
   },
   "dependencies": {
     "react": "^19.2.8",
