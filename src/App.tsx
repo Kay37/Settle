@@ -49,3 +49,16 @@ import './index.css'
 
 type View = 'brief' | 'all' | 'ask'
 type ListFilter = Category | 'all' | 'due' | 'waiting'
+
+function formatWhen(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function labelFor(category: Category): string {
+  return CATEGORIES.find((c) => c.id === category)?.label ?? category
+}
