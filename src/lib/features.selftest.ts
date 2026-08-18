@@ -21,6 +21,7 @@ import { classifyConfidence } from './classify.ts'
 import { mentionCount } from './duplicates.ts'
 import { possibleSteps } from './possibleSteps.ts'
 import { peopleMentioned, recentCaptured } from './memory.ts'
+import { carriedOverOpen } from './carriedOver.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg)
@@ -205,5 +206,18 @@ assert(mentionCount('call dentist', thoughts) >= 2, 'mention count')
 assert(possibleSteps(thoughts[1]).length >= 1, 'possible steps')
 assert(peopleMentioned(thoughts).some((p) => p.person === 'Sam'), 'people memory')
 assert(recentCaptured(thoughts, 24, now).length >= 0, 'recent captured')
+
+const yesterday = new Date(now)
+yesterday.setDate(yesterday.getDate() - 1)
+const oldOpen: Thought = {
+  id: 'old',
+  text: 'finish report',
+  title: 'report',
+  category: 'do',
+  status: 'open',
+  createdAt: yesterday.toISOString(),
+  updatedAt: yesterday.toISOString(),
+}
+assert(carriedOverOpen([oldOpen]).length === 1, 'carried over open loops')
 
 console.log('features.selftest: all passed')
