@@ -64,10 +64,9 @@ Nothing user-generated is stored on Vercel.
 | Screen | What it does |
 |---|---|
 | Dump box | Text / Speak → gold **Settle** button (⌘/Ctrl+Enter) |
-| Today | Ranked Next 3, then Do / People / Worries / Think |
-| All | Search, Dated filter, categories, edit, snooze |
-| Ask | Search past dumps (“Sam”, “passport”) |
-| Settings | Optional filing endpoint; Shortcuts URL help |
+| Today | Ranked Next 3, last 24h, waiting, Do / People / Worries / Think |
+| All | Search (Ask), Dated / Waiting filters, categories, edit, snooze |
+| Settings | Filing, preferred snooze, Shortcuts, sync (collapsed), What Settle knows |
 
 **Snooze:** Tonight / Tomorrow on a thought (hides from Today until then).  
 **Undo:** toast after a settle.  
@@ -112,7 +111,7 @@ scripts/generate-icons.mjs  Regenerate PNG icons
 vercel.json                 Vite on Vercel
 ```
 
-### Storage (don’t break this)
+### Storage (don't break this)
 
 | Key | Purpose |
 |---|---|
@@ -130,7 +129,7 @@ vercel.json                 Vite on Vercel
 
 ---
 
-## What’s already built
+## What's already built
 
 - Dump box + Speak
 - Auto split / classify / assign (dates, people)
@@ -159,7 +158,11 @@ vercel.json                 Vite on Vercel
 14. ~~**iOS widget**~~ — compact `/widget` Next 3 page + Shortcuts pin steps.
 15. ~~**Share into Settle**~~ — Web Share Target + iOS Share shortcut.
 16. ~~**Due reminders + calendar**~~ — optional local notifications; .ics on dated thoughts.
-17. **Custom domain** on Vercel (optional).
+17. ~~**Echo merge / keep both**~~, confidence chips, mention counts.
+18. ~~**Mind-changed supersedes**~~, private thoughts, never-resurface, people memory.
+19. ~~**Recently captured, possible steps, ··· overflow, worry styling, haptic**~~
+20. ~~**Merge All + Ask, preferred snooze, mind-changed supersede, month dates**~~
+21. **Custom domain** on Vercel (optional).
 
 ---
 
@@ -177,7 +180,7 @@ vercel.json                 Vite on Vercel
   git push -u origin main
   ```
 
-- Temporary trycloudflare links **die**. Don’t bookmark them.
+- Temporary trycloudflare links **die**. Don't bookmark them.
 - Voice is best in Chrome/Edge; Safari is spotty.
 - Classifier is rules, not an LLM, unless you add a filing endpoint.
 
@@ -190,4 +193,4 @@ vercel.json                 Vite on Vercel
 3. `npm install` → `npm run dev`.
 4. Optional: connect the repo to Vercel so every push goes live.
 
-That’s the whole product so far: dump the mess, hit **Settle**, work the Next 3.
+That's the whole product so far: dump the mess, hit **Settle**, work the Next 3.
