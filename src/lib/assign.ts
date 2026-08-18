@@ -153,7 +153,7 @@ export function parseDueAt(text: string, now = new Date()): Date | null {
 
   if (!due) {
     for (let i = 0; i < WEEKDAYS.length; i++) {
-      const re = new RegExp('\\b(this|next|on)?\\s*' + WEEKDAYS[i] + '\\b')
+      const re = new RegExp(`\\b(this|next|on)?\\s*${WEEKDAYS[i]}\\b`)
       if (re.test(t)) {
         due = nextWeekday(now, i)
         if (t.includes('this') && now.getDay() === i) due = atHour(now, 9)
@@ -177,7 +177,7 @@ export function parseDueAt(text: string, now = new Date()): Date | null {
 export function extractPerson(text: string): string | null {
   const lower = text.toLowerCase()
   for (const [key, label] of Object.entries(RELATIVES)) {
-    if (new RegExp('\\b' + key + '\\b').test(lower)) return label
+    if (new RegExp(`\\b${key}\\b`).test(lower)) return label
   }
 
   const named = text.match(
@@ -211,7 +211,7 @@ export function nextActionFrom(text: string, person: string | null): string {
   }
   const slice = cut.slice(0, 56)
   const lastSpace = slice.lastIndexOf(' ')
-  return (lastSpace > 24 ? slice.slice(0, lastSpace) : slice).trim() + '…'
+  return `${(lastSpace > 24 ? slice.slice(0, lastSpace) : slice).trim()}…`
 }
 
 export function assign(text: string, now = new Date()): Assignment {
@@ -254,7 +254,7 @@ export function dueLabel(dueAt: string | null | undefined, now = new Date()): st
     return due < now ? 'Due now' : 'Due today'
   }
   if (due >= startTomorrow && due < startNext) return 'Due tomorrow'
-  return 'Due ' + due.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  return `Due ${due.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}`
 }
 
 export function formatDueTime(dueAt: string): string {
