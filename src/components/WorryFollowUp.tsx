@@ -24,10 +24,10 @@ export default function WorryFollowUp({
   return (
     <div className="modal-backdrop worry-backdrop" role="presentation">
       <div className="modal worry-modal" role="dialog" aria-label="Worry follow-up">
-        <p className="kicker">Not everything is a task</p>
+        <p className="kicker">Not a task</p>
         <h2>Worry parked</h2>
         <p className="modal-lead">
-          This doesn&apos;t have to become a todo. Choose what feels right.
+          Just a loop to revisit — not everything needs a todo.
         </p>
         <blockquote className="worry-quote">{top.text}</blockquote>
         {worries.length > 1 && (

@@ -17,7 +17,7 @@ export default defineConfig({
       manifest: {
         name: 'Settle',
         short_name: 'Settle',
-        description: 'Dump mental clutter. Filing and assigning is automatic.',
+        description: 'Get it off your mind. Settle splits, files, and surfaces your next 3.',
         theme_color: '#1b3d2f',
         background_color: '#163328',
         display: 'standalone',
