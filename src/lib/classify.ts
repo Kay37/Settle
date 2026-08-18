@@ -1,5 +1,6 @@
 import type { Category, LearnedRule } from '../types'
 import { applyLearned } from './learn'
+import { PEOPLE_STOP } from './peopleStop'
 
 const DO_WORDS =
   /\b(buy|get|pick up|grab|call|email|text|schedule|book|pay|fix|send|submit|order|renew|cancel|return|mail|ship|wash|clean|drop off|grocery|groceries|appointment|deadline|todo|to-do|need to|have to|gotta|must|errand|finish|complete|reply|respond|print|pickup|flight|hotel|reservation|passport|visa|rental|airbnb|travel|pack|luggage|check in|check out)\b/i
@@ -9,28 +10,6 @@ const PEOPLE_WORDS =
 
 const PEOPLE_NAME =
   /\b(call|text|email|message|ping|remind|ask|tell|visit|meet|facetime)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?|[a-z]{2,14})\b/
-
-const PEOPLE_STOP = new Set([
-  'the',
-  'my',
-  'a',
-  'an',
-  'this',
-  'that',
-  'him',
-  'her',
-  'them',
-  'someone',
-  'anyone',
-  'back',
-  'home',
-  'work',
-  'about',
-  'bank',
-  'store',
-  'doctor',
-  'dentist',
-])
 
 const THINK_WORDS =
   /\b(idea|maybe|what if|consider|decide|decision|wonder|curious|brainstorm|project|side project|build|startup|concept|hypothesis|should i|ponder|riff)\b/i
@@ -102,7 +81,7 @@ export function titleFromText(text: string): string {
   if (oneLine.length <= 72) return oneLine
   const cut = oneLine.slice(0, 72)
   const lastSpace = cut.lastIndexOf(' ')
-  return `${(lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim()}…`
+  return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim() + '…'
 }
 
 function looksLikePersonMention(text: string): boolean {
@@ -140,6 +119,30 @@ export function classify(text: string, learned: LearnedRule[] = []): Category {
   return 'note'
 }
 
+/** 0–1 how sure the rule classifier is. Low scores get a "?" chip. */
+export function classifyConfidence(
+  text: string,
+  category: Category,
+  learned: LearnedRule[] = [],
+): number {
+  if (applyLearned(text, learned)) return 0.94
+  const t = text.trim()
+  const hits = [
+    WORRY_WORDS.test(t),
+    looksLikePersonMention(t),
+    LATER_WORDS.test(t),
+    THINK_WORDS.test(t),
+    DO_WORDS.test(t),
+  ].filter(Boolean).length
+  if (hits >= 2) return 0.48
+  if (category === 'note') return 0.42
+  if (category === 'do' && /^(buy|get|grab|call|text|book|pay)\b/i.test(t)) {
+    return 0.86
+  }
+  if (category === 'worry' || category === 'people') return 0.82
+  return 0.68
+}
+
 export function urgencyScore(text: string): number {
   let score = 0
   if (URGENCY.test(text)) score += 5
@@ -160,8 +163,8 @@ export function greetingForHour(hour: number): string {
 export function briefIntro(openCount: number): string {
   if (openCount === 0) return 'Your head is clear. Dump anything that shows up.'
   if (openCount === 1) return 'One open loop. Finish it or park it.'
-  if (openCount < 5) return `${openCount} open loops — pick a few, ignore the rest.`
-  return `${openCount} open loops. Don’t organize — just pick what’s next.`
+  if (openCount < 5) return openCount + ' open loops — pick a few, ignore the rest.'
+  return openCount + ' open loops. Don't organize — just pick what's next.'
 }
 
 export function dumpFromLocation(search: string, hash: string): {
@@ -212,7 +215,7 @@ export function searchThoughts<T extends { title: string; text: string; person?:
   const tokens = q.split(/\s+/).filter((t) => t.length > 1)
   return items
     .map((item) => {
-      const hay = `${item.title} ${item.text} ${item.person ?? ''}`.toLowerCase()
+      const hay = [item.title, item.text, item.person ?? ''].join(' ').toLowerCase()
       let score = 0
       if (hay.includes(q)) score += 8
       for (const tok of tokens) if (hay.includes(tok)) score += 2
