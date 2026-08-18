@@ -26,6 +26,9 @@ export interface Thought {
   nextAction?: string
   snoozeUntil?: string | null
   project?: string | null
+  confidence?: number
+  private?: boolean
+  supersedesId?: string | null
 }
 
 export interface AppState {
