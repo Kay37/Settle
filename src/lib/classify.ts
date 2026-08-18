@@ -176,13 +176,23 @@ export function dumpFromLocation(search: string, hash: string): {
     }
   }
 
-  const text = (
-    params.get('dump') ||
-    params.get('text') ||
-    params.get('q') ||
-    params.get('body') ||
+  const dump = params.get('dump')?.trim() ?? ''
+  const sharedText = params.get('text')?.trim() ?? ''
+  const sharedTitle = params.get('title')?.trim() ?? ''
+  const sharedUrl = params.get('url')?.trim() ?? ''
+  const fallback =
+    params.get('q')?.trim() ||
+    params.get('body')?.trim() ||
     ''
-  ).trim()
+  const sharedBits = [
+    sharedText || sharedTitle || fallback,
+    sharedUrl && !(sharedText || sharedTitle || fallback).includes(sharedUrl)
+      ? sharedUrl
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const text = (dump || sharedBits).trim()
 
   const autoUnload =
     params.get('unload') === '1' ||
