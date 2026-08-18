@@ -6,6 +6,7 @@ export function localAsk(thoughts: Thought[], query: string, limit = 8): Thought
   const tokens = q.split(/\s+/).filter((t) => t.length > 1)
 
   return thoughts
+    .filter((t) => !t.private)
     .map((t) => {
       const hay = `${t.title} ${t.text} ${t.person ?? ''} ${t.project ?? ''}`.toLowerCase()
       let score = 0
@@ -38,7 +39,10 @@ export async function askWithEndpoint(
       headers,
       body: JSON.stringify({
         query,
-        thoughts: thoughts.slice(0, 80).map((t) => ({
+        thoughts: thoughts
+          .filter((t) => !t.private)
+          .slice(0, 80)
+          .map((t) => ({
           id: t.id,
           title: t.title,
           text: t.text,
