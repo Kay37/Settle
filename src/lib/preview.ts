@@ -1,6 +1,6 @@
 import type { Category, LearnedRule } from '../types'
 import { assign } from './assign'
-import { classify, splitDump, titleFromText } from './classify'
+import { classify, classifyConfidence, splitDump, titleFromText } from './classify'
 
 export type PreviewItem = {
   text: string
@@ -8,6 +8,7 @@ export type PreviewItem = {
   category: Category
   person: string | null
   dueLabel: string | null
+  confidence: number
 }
 
 export function previewDraft(
@@ -37,6 +38,7 @@ export function previewDraft(
       category,
       person: a.person,
       dueLabel,
+      confidence: classifyConfidence(text, category, learned),
     }
   })
 }
