@@ -34,6 +34,9 @@ function normalizeThought(t: Thought): Thought {
     person: t.person ?? null,
     nextAction: t.nextAction ?? t.title,
     snoozeUntil: t.snoozeUntil ?? null,
+    private: Boolean(t.private),
+    supersedesId: t.supersedesId ?? null,
+    confidence: t.confidence,
   }
 }
 

@@ -13,10 +13,14 @@ import { brainSweepQueue, sweepDue } from './brainSweep.ts'
 import { detectProjectHints } from './projectHints.ts'
 import { localAsk } from './askShared.ts'
 import { gentleInsights } from './insights.ts'
-import { looksLikeMindChanged, suggestedCategoryAfterEdit } from './mindChanged.ts'
+import { looksLikeMindChanged, suggestedCategoryAfterEdit, findSuperseded } from './mindChanged.ts'
 import { nextThree } from './rank.ts'
 import { thoughtToIcs } from './calendar.ts'
 import { dueForReminder } from './reminders.ts'
+import { classifyConfidence } from './classify.ts'
+import { mentionCount } from './duplicates.ts'
+import { possibleSteps } from './possibleSteps.ts'
+import { peopleMentioned, recentCaptured } from './memory.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg)
@@ -140,6 +144,33 @@ assert(looksLikeMindChanged('buy milk', 'worried about the meeting'), 'mind chan
 assert(!looksLikeMindChanged('buy milk', 'buy milks'), 'typo not mind change')
 assert(suggestedCategoryAfterEdit('worried about talk', 'do') === 'worry', 'refile suggest')
 
+const laptop: Thought = {
+  id: 'lap',
+  text: 'definitely need a new laptop, this one is dying',
+  title: 'new laptop',
+  category: 'think',
+  status: 'open',
+  createdAt: now.toISOString(),
+  updatedAt: now.toISOString(),
+}
+assert(
+  findSuperseded('actually the laptop is fine if I replace the battery', [laptop])?.id === 'lap',
+  'mind-changed supersede',
+)
+
+const privateThought: Thought = {
+  id: 'priv',
+  text: 'secret passport number',
+  title: 'passport',
+  category: 'note',
+  status: 'open',
+  createdAt: now.toISOString(),
+  updatedAt: now.toISOString(),
+  private: true,
+}
+assert(localAsk([privateThought], 'passport').length === 0, 'ask skips private')
+assert(findEchoes('call dentist', thoughts, 1, [thoughts[1].text]).length === 0, 'muted echo')
+
 const insightThoughts: Thought[] = [
   ...clusterThoughts,
   { id: 'c3', text: 'pack for hawaii', title: 'Pack', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString(), project: 'Hawaii trip' },
@@ -168,5 +199,11 @@ const remind = dueForReminder([
   { id: 'd1', text: 'pay bill', title: 'pay bill', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString(), dueAt: '2026-08-17T12:00:00.000Z' },
 ], now)
 assert(remind.length === 1, 'due reminder')
+
+assert(classifyConfidence('wifi password is orchid', 'note') < 0.55, 'low confidence notes')
+assert(mentionCount('call dentist', thoughts) >= 2, 'mention count')
+assert(possibleSteps(thoughts[1]).length >= 1, 'possible steps')
+assert(peopleMentioned(thoughts).some((p) => p.person === 'Sam'), 'people memory')
+assert(recentCaptured(thoughts, 24, now).length >= 0, 'recent captured')
 
 console.log('features.selftest: all passed')

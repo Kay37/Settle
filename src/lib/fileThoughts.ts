@@ -1,6 +1,6 @@
 import type { Category, LearnedRule } from '../types'
 import { assign } from './assign'
-import { classify, titleFromText } from './classify'
+import { classify, classifyConfidence, titleFromText } from './classify'
 
 export type FiledItem = {
   text: string
@@ -9,6 +9,7 @@ export type FiledItem = {
   dueAt: string | null
   person: string | null
   nextAction: string
+  confidence: number
 }
 
 const VALID: Category[] = ['do', 'people', 'think', 'worry', 'later', 'note']
@@ -32,6 +33,7 @@ export function fileLocally(
       dueAt: a.dueAt,
       person: a.person,
       nextAction: a.nextAction,
+      confidence: classifyConfidence(text, category, learned),
     }
   })
 }

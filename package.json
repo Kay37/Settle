@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "inflate-app": "node scripts/inflate-app.mjs",
+    "build": "node scripts/inflate-app.mjs && tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "test:classify": "tsx src/lib/classify.selftest.ts",

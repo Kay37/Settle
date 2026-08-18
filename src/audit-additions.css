@@ -1,0 +1,117 @@
+.dump-shell.settled-pulse textarea {
+  animation: dumpFade 0.65s ease;
+}
+
+@keyframes dumpFade {
+  0% { opacity: 0.35; }
+  100% { opacity: 1; }
+}
+
+.sync-section summary {
+  cursor: pointer;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.preview-chip.is-unsure {
+  border: 1px dashed rgba(20, 32, 28, 0.28);
+}
+
+.echo-card {
+  margin-top: 0.55rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 14px;
+  background: rgba(212, 162, 76, 0.12);
+  border: 1px solid rgba(212, 162, 76, 0.22);
+}
+
+.echo-card p {
+  margin: 0 0 0.45rem;
+  font-size: 0.84rem;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.echo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.recent-section {
+  margin-top: 0.85rem;
+}
+
+.recent-list {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.recent-list li {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  font-size: 0.86rem;
+  font-weight: 550;
+}
+
+.thought.is-worry {
+  background: rgba(247, 243, 234, 0.92);
+  border-color: rgba(191, 0, 15, 0.12);
+}
+
+.thought.is-private {
+  border-style: dashed;
+}
+
+.chip.echo {
+  background: rgba(212, 162, 76, 0.18);
+  color: #7a5a18;
+}
+
+.steps-card {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.steps-card summary {
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--teal-dark);
+}
+
+.steps-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.more-actions {
+  position: relative;
+}
+
+.more-actions summary {
+  list-style: none;
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 0.38rem 0.68rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  background: rgba(27, 61, 47, 0.06);
+}
+
+.more-actions summary::-webkit-details-marker {
+  display: none;
+}
+
+.more-actions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}

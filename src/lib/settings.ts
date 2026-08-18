@@ -5,6 +5,8 @@ export interface Settings {
   filingToken: string
   /** Local due notifications (installed PWA / supporting browsers). */
   reminders: boolean
+  mutedPhrases: string[]
+  defaultSnooze: 'tonight' | 'tomorrow' | 'weekend'
 }
 
 const KEY = 'settle.settings.v1'
@@ -15,6 +17,8 @@ const defaults: Settings = {
   filingEndpoint: '',
   filingToken: '',
   reminders: false,
+  mutedPhrases: [],
+  defaultSnooze: 'tomorrow',
 }
 
 export function loadSettings(): Settings {
@@ -37,6 +41,14 @@ export function loadSettings(): Settings {
             ? parsed.openaiApiKey
             : '',
       reminders: Boolean(parsed.reminders),
+      mutedPhrases: Array.isArray(parsed.mutedPhrases)
+        ? parsed.mutedPhrases.filter((p): p is string => typeof p === 'string')
+        : [],
+      defaultSnooze:
+        parsed.defaultSnooze === 'tonight' ||
+        parsed.defaultSnooze === 'weekend'
+          ? parsed.defaultSnooze
+          : 'tomorrow',
     }
   } catch {
     return defaults

@@ -41,10 +41,14 @@ export function findEchoes(
   text: string,
   thoughts: Thought[],
   limit = 1,
+  muted: string[] = [],
 ): Thought[] {
+  const mutedSet = new Set(muted.map((m) => normalizeForMatch(m)).filter(Boolean))
   const hits: { thought: Thought; score: number }[] = []
   for (const t of thoughts) {
     if (t.status === 'parked') continue
+    if (t.private) continue
+    if (mutedSet.has(normalizeForMatch(t.text))) continue
     const score = overlapScore(text, t.text)
     if (score >= 0.72) hits.push({ thought: t, score })
   }
@@ -52,4 +56,9 @@ export function findEchoes(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((h) => h.thought)
+}
+
+/** How often this loop has been dumped. */
+export function mentionCount(text: string, thoughts: Thought[]): number {
+  return 1 + findEchoes(text, thoughts, 20).length
 }

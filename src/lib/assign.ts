@@ -1,40 +1,10 @@
+import { PEOPLE_STOP } from './peopleStop'
+
 export type Assignment = {
   dueAt: string | null
   person: string | null
   nextAction: string
 }
-
-const PEOPLE_STOP = new Set([
-  'the',
-  'my',
-  'a',
-  'an',
-  'this',
-  'that',
-  'him',
-  'her',
-  'them',
-  'someone',
-  'anyone',
-  'back',
-  'home',
-  'work',
-  'about',
-  'bank',
-  'store',
-  'doctor',
-  'dentist',
-  'today',
-  'tomorrow',
-  'tonight',
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
-])
 
 const RELATIVES: Record<string, string> = {
   mom: 'Mom',
@@ -82,6 +52,62 @@ function nextWeekday(from: Date, weekday: number): Date {
   return atHour(d, 9)
 }
 
+const MONTHS: Record<string, number> = {
+  january: 0,
+  jan: 0,
+  february: 1,
+  feb: 1,
+  march: 2,
+  mar: 2,
+  april: 3,
+  apr: 3,
+  may: 4,
+  june: 5,
+  jun: 5,
+  july: 6,
+  jul: 6,
+  august: 7,
+  aug: 7,
+  september: 8,
+  sep: 8,
+  sept: 8,
+  october: 9,
+  oct: 9,
+  november: 10,
+  nov: 10,
+  december: 11,
+  dec: 11,
+}
+
+function parseMonthDay(text: string, now: Date): Date | null {
+  const named = text.match(
+    /\b(january|february|march|april|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|may)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i,
+  )
+  if (named) {
+    const month = MONTHS[named[1].toLowerCase()]
+    const day = Number(named[2])
+    if (month === undefined || day < 1 || day > 31) return null
+    const d = new Date(now.getFullYear(), month, day, 9, 0, 0, 0)
+    if (d.getTime() < now.getTime() - 36e5) d.setFullYear(d.getFullYear() + 1)
+    return d
+  }
+  const slash = text.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/)
+  if (!slash) return null
+  const month = Number(slash[1]) - 1
+  const day = Number(slash[2])
+  if (month < 0 || month > 11 || day < 1 || day > 31) return null
+  let year = now.getFullYear()
+  if (slash[3]) {
+    year = Number(slash[3])
+    if (year < 100) year += 2000
+  }
+  const d = new Date(year, month, day, 9, 0, 0, 0)
+  if (!slash[3] && d.getTime() < now.getTime() - 36e5) {
+    d.setFullYear(d.getFullYear() + 1)
+  }
+  return d
+}
+
 function parseClock(text: string): { hour: number; minute: number } | null {
   const m = text.match(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i)
   if (!m) return null
@@ -117,8 +143,12 @@ export function parseDueAt(text: string, now = new Date()): Date | null {
   } else if (/\bbefore .+(visit|trip|meeting|party)\b/.test(t)) {
     due = atHour(addDays(now, 7), 9)
   } else {
-    const inDays = t.match(/\bin\s+(\d+)\s+days?\b/)
-    if (inDays) due = atHour(addDays(now, Number(inDays[1])), 9)
+    const monthDue = parseMonthDay(t, now)
+    if (monthDue) due = monthDue
+    else {
+      const inDays = t.match(/\bin\s+(\d+)\s+days?\b/)
+      if (inDays) due = atHour(addDays(now, Number(inDays[1])), 9)
+    }
   }
 
   if (!due) {
