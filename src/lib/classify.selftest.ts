@@ -40,6 +40,11 @@ const deep = dumpFromLocation('?dump=hello%20world&unload=1', '')
 assert(deep.text === 'hello world', 'dump param')
 assert(deep.autoUnload === true, 'auto unload')
 
+const shared = dumpFromLocation('?text=buy%20milk&title=Note', '')
+assert(shared.text === 'buy milk', 'share text')
+const sharedUrl = dumpFromLocation('?title=Link&url=https://example.com', '')
+assert(sharedUrl.text.includes('Link') && sharedUrl.text.includes('example.com'), 'share title+url')
+
 const now = new Date('2026-08-17T15:00:00')
 const dueTomorrow = parseDueAt('text Sam tomorrow', now)
 assert(dueTomorrow !== null && dueTomorrow.getDate() === 18, 'tomorrow date')

@@ -43,12 +43,17 @@ Data stays in the browser (`localStorage`). The Vercel URL is just the app shell
 3. Check **Today** for next 3, people radar, and brief sections.
 4. Mark **Done**, snooze, **Edit**, or fix a category.
 5. Miss-tap? Hit **Undo** on the toast.
+6. Dated thoughts have **Calendar** (saves a .ics). Settings can turn on due reminders.
 
 **Sync phone ↔ PC:** Settings → copy sync code on one device, paste on the other.
 
 ## iOS Shortcuts
 
 Setup guide with QR code: **`/shortcuts`** on your live host.
+
+Compact Next 3 “widget”: **`/widget`** — Add to Home Screen from Safari, or pin via Shortcuts.
+
+Share into Settle from another app: iOS Share Sheet shortcut, or Android **Share → Settle**.
 
 ```
 https://YOUR-HOST/?dump=YOUR_TEXT&unload=1
