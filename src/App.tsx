@@ -12,7 +12,7 @@ import BrainSweep from './components/BrainSweep'
 import { askWithEndpoint, localAsk } from './lib/askShared'
 import { brainSweepQueue, markSweepDone, sweepDue } from './lib/brainSweep'
 import { findClarifyPrompts } from './lib/clarify'
-import { findEchoes } from './lib_duplicates'
+import { findEchoes } from './lib/duplicates'
 import { settleSummary } from './lib/settleSummary'
 import { isWaiting } from './lib/waiting'
 import { waitingLabel, waitingLoops } from './lib/waitingLoops'
@@ -582,7 +582,7 @@ export default function App() {
 
   return (
     <div className="app">
-      PLACEHOLDER_TRUNCATED
+      PLACEHOLDER_WILL_BE_REPLACED
     </div>
   )
 }
