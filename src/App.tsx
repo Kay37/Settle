@@ -8,6 +8,9 @@ import {
 import type { Category, LearnedRule, Thought } from './types'
 import { CATEGORIES } from './types'
 import WorryFollowUp, { revisitFridayIso } from './components/WorryFollowUp'
+import BrainSweep from './components/BrainSweep'
+import { askWithEndpoint, localAsk } from './lib/askShared'
+import { brainSweepQueue, markSweepDone, sweepDue } from './lib/brainSweep'
 import { findClarifyPrompts } from './lib/clarify'
 import { findEchoes } from './lib/duplicates'
 import { settleSummary } from './lib/settleSummary'
@@ -35,6 +38,7 @@ import { createRecognizer, speechSupported } from './lib/speech'
 import { peopleRadar, staleLabel } from './lib/peopleRadar'
 import { personDraft, personMessage } from './lib/personDraft'
 import { previewDraft } from './lib/preview'
+import { detectProjectHints } from './lib/projectHints'
 import { exportJson, loadState, saveState, uid } from './lib/storage'
 import { fromSyncCode, mergeSyncState, toSyncCode } from './lib/syncCode'
 import { staleDays, staleSweep } from './lib/staleSweep'
@@ -126,6 +130,11 @@ export default function App() {
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<number, Category>>({})
   const [worryBatch, setWorryBatch] = useState<Thought[] | null>(null)
   const [reliefPulse, setReliefPulse] = useState(false)
+  const [sweepQueue, setSweepQueue] = useState<Thought[]>([])
+  const [sweepOpen, setSweepOpen] = useState(false)
+  const [askHits, setAskHits] = useState<Thought[]>([])
+  const [askSource, setAskSource] = useState<string | null>(null)
+  const [askLoading, setAskLoading] = useState(false)
   const autoUnloadedRef = useRef(false)
   const recognizerRef = useRef<ReturnType<typeof createRecognizer>>(null)
   const interimRef = useRef('')
@@ -250,10 +259,80 @@ export default function App() {
     return list
   }, [thoughts, filter, query, hideDone])
 
-  const askHits = useMemo(
+  const askHitsLocal = useMemo(
     () => searchThoughts(thoughts, ask),
     [thoughts, ask],
   )
+
+  useEffect(() => {
+    const q = ask.trim()
+    if (!q) {
+      setAskHits([])
+      setAskSource(null)
+      setAskLoading(false)
+      return
+    }
+
+    const local = localAsk(thoughts, q)
+    setAskHits(local)
+    setAskSource('local')
+
+    if (!settings.useAi) {
+      setAskLoading(false)
+      return
+    }
+
+    const endpoint =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/api/ask`
+        : '/api/ask'
+
+    let cancelled = false
+    setAskLoading(true)
+
+    void askWithEndpoint(thoughts, q, endpoint, settings.filingToken).then(
+      (result) => {
+        if (cancelled) return
+        const byId = new Map(thoughts.map((t) => [t.id, t]))
+        const ordered = result.ids
+          .map((id) => byId.get(id))
+          .filter((t): t is Thought => Boolean(t))
+        setAskHits(ordered.length ? ordered : local)
+        setAskSource(result.source)
+        setAskLoading(false)
+      },
+    )
+
+    return () => {
+      cancelled = true
+    }
+  }, [ask, thoughts, settings.useAi, settings.filingToken])
+
+  const projectHints = useMemo(() => detectProjectHints(thoughts), [thoughts])
+  const sweepCandidates = useMemo(() => brainSweepQueue(thoughts), [thoughts])
+
+  function startBrainSweep() {
+    setSweepQueue(brainSweepQueue(thoughts))
+    setSweepOpen(true)
+  }
+
+  function finishBrainSweep() {
+    setSweepOpen(false)
+    setSweepQueue([])
+    markSweepDone()
+    flash('Brain sweep done — head clearer')
+  }
+
+  function tagProject(name: string, ids: string[]) {
+    const idSet = new Set(ids)
+    const now = new Date().toISOString()
+    setThoughts((prev) =>
+      prev.map((t) =>
+        idSet.has(t.id) ? { ...t, project: name, updatedAt: now } : t,
+      ),
+    )
+    flash(`Tagged ${ids.length} as “${name}”`)
+  }
 
   const draftPreview = useMemo(
     () => (draft.trim() ? previewDraft(draft, learned) : []),
@@ -676,7 +755,43 @@ export default function App() {
               <button type="button" className="btn-ghost" onClick={copyBrief}>
                 Copy next 3
               </button>
+              {sweepCandidates.length > 0 && (
+                <button type="button" className="btn-ghost" onClick={startBrainSweep}>
+                  Brain sweep{sweepDue() ? '' : ' ✓'}
+                </button>
+              )}
             </div>
+
+            {projectHints.length > 0 && (
+              <div className="project-section" aria-label="Project hints">
+                <div className="radar-head">
+                  <h3>Same project?</h3>
+                  <p>These open loops share keywords — group if you want.</p>
+                </div>
+                <div className="project-list">
+                  {projectHints.map((hint) => (
+                    <div key={hint.name} className="project-card">
+                      <p className="radar-action">{hint.name}</p>
+                      <p className="thought-meta">
+                        {hint.thoughts.length} thoughts · {hint.keywords.join(', ')}
+                      </p>
+                      <button
+                        type="button"
+                        className="done-mini"
+                        onClick={() =>
+                          tagProject(
+                            hint.name,
+                            hint.thoughts.map((t) => t.id),
+                          )
+                        }
+                      >
+                        Tag project
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {waitingItems.length > 0 && (
               <div className="waiting-section" aria-label="Waiting for">
@@ -921,10 +1036,14 @@ export default function App() {
               aria-label="Ask your dumps"
               autoFocus
             />
+            {askLoading && <p className="thought-meta">Searching deeper…</p>}
+            {askSource === 'openai' && ask.trim() && !askLoading && (
+              <p className="thought-meta">Smart match</p>
+            )}
             <div className="thought-list" style={{ marginTop: '0.9rem' }}>
               {!ask.trim() ? (
                 <p className="thought-meta">Type a name or a scrap of a thought.</p>
-              ) : askHits.length === 0 ? (
+              ) : askHits.length === 0 && !askLoading ? (
                 <p className="thought-meta">Nothing matched.</p>
               ) : (
                 askHits.map((t) => (
@@ -932,6 +1051,11 @@ export default function App() {
                 ))
               )}
             </div>
+            {!settings.useAi && ask.trim() && askHitsLocal.length > askHits.length && (
+              <p className="thought-meta">
+                Enable smart filing in Settings for semantic Ask via /api/ask
+              </p>
+            )}
           </div>
         </section>
       )}
@@ -1013,6 +1137,26 @@ export default function App() {
             flash('Worry cleared')
           }}
           onClose={() => setWorryBatch(null)}
+        />
+      )}
+
+      {sweepOpen && sweepQueue.length > 0 && (
+        <BrainSweep
+          queue={sweepQueue}
+          onDone={(id) => {
+            updateThought(id, { status: 'done' })
+            setSweepQueue((q) => q.filter((t) => t.id !== id))
+          }}
+          onTonight={(id) => {
+            snooze(id, 'tonight')
+            setSweepQueue((q) => q.filter((t) => t.id !== id))
+          }}
+          onLater={(id) => {
+            updateThought(id, { status: 'parked', category: 'later' })
+            setSweepQueue((q) => q.filter((t) => t.id !== id))
+          }}
+          onSkip={finishBrainSweep}
+          onFinish={finishBrainSweep}
         />
       )}
     </div>
@@ -1351,6 +1495,9 @@ function ThoughtRow({
               <div className="meta-row">
                 {thought.person && (
                   <span className="chip person">{thought.person}</span>
+                )}
+                {thought.project && (
+                  <span className="chip project">{thought.project}</span>
                 )}
                 {due && (
                   <span className={`chip ${overdue ? 'overdue' : 'due'}`}>

@@ -25,6 +25,7 @@ export interface Thought {
   person?: string | null
   nextAction?: string
   snoozeUntil?: string | null
+  project?: string | null
 }
 
 export interface AppState {

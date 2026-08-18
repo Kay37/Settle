@@ -107,7 +107,16 @@ export function parseDueAt(text: string, now = new Date()): Date | null {
   else if (/\btomorrow\b/.test(t)) due = atHour(addDays(now, 1), 9)
   else if (/\bnext week\b/.test(t)) due = atHour(addDays(now, 7), 9)
   else if (/\bin a week\b/.test(t)) due = atHour(addDays(now, 7), 9)
-  else {
+  else if (/\bin\s+2\s+weeks?\b/.test(t)) due = atHour(addDays(now, 14), 9)
+  else if (/\bthis weekend\b/.test(t)) {
+    const day = now.getDay()
+    const toSat = (6 - day + 7) % 7 || 7
+    due = atHour(addDays(now, toSat), 9)
+  } else if (/\bafter (my )?(vacation|trip|holiday)\b/.test(t)) {
+    due = atHour(addDays(now, 14), 9)
+  } else if (/\bbefore .+(visit|trip|meeting|party)\b/.test(t)) {
+    due = atHour(addDays(now, 7), 9)
+  } else {
     const inDays = t.match(/\bin\s+(\d+)\s+days?\b/)
     if (inDays) due = atHour(addDays(now, Number(inDays[1])), 9)
   }

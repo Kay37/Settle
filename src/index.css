@@ -1064,6 +1064,51 @@ button {
   color: var(--teal-dark);
 }
 
+.chip.project {
+  background: rgba(212, 162, 76, 0.18);
+  color: #7a5a18;
+}
+
+.project-section {
+  margin-top: 1.15rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.project-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.project-card {
+  padding: 0.7rem 0.75rem;
+  border-radius: 14px;
+  background: rgba(212, 162, 76, 0.1);
+  border: 1px solid rgba(212, 162, 76, 0.2);
+}
+
+.sweep-modal .sweep-card {
+  margin-top: 0.65rem;
+  padding: 0.85rem;
+  border-radius: 14px;
+  background: rgba(47, 111, 106, 0.08);
+}
+
+.sweep-text {
+  margin: 0.55rem 0 0;
+  font-size: 1.05rem;
+  font-family: var(--font-serif);
+  line-height: 1.35;
+}
+
+.sweep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
 .worry-modal blockquote.worry-quote {
   margin: 0.75rem 0;
   padding: 0.75rem 0.85rem;

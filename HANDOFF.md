@@ -149,8 +149,11 @@ vercel.json                 Vite on Vercel
 4. ~~**People radar actions**~~ — Draft / Copy on each person loop.
 5. ~~**Secure /api/file**~~ — `FILING_SECRET` + rate limit.
 6. ~~**/shortcuts page**~~ — QR + step-by-step iOS setup.
-7. **Custom domain** on Vercel (optional).
-8. **Use it daily** — tune classifier from real dumps.
+7. ~~**Brain sweep**~~ — Today → quick review queue.
+8. ~~**Project hints**~~ — keyword clusters + soft tag.
+9. ~~**Semantic Ask**~~ — `/api/ask` when smart filing on.
+10. ~~**Richer dates**~~ — this weekend, in 2 weeks, before visit.
+11. **Custom domain** on Vercel (optional).
 
 ---
 

@@ -39,5 +39,8 @@ assert(dueTomorrow !== null && dueTomorrow.getDate() === 18, 'tomorrow date')
 assert(extractPerson('text Sam tomorrow') === 'Sam', 'person Sam')
 assert(extractPerson('call mom tonight') === 'Mom', 'person Mom')
 assert(assign('buy oat milk today', now).dueAt !== null, 'today due')
+assert(parseDueAt('this weekend', now) !== null, 'this weekend')
+assert(parseDueAt('in 2 weeks', now) !== null, 'two weeks')
+assert(parseDueAt('before mom visit', now) !== null, 'before visit')
 
 console.log('classify.selftest: all passed')

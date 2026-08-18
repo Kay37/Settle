@@ -9,6 +9,9 @@ import { findClarifyPrompts } from './clarify.ts'
 import { settleSummary } from './settleSummary.ts'
 import { isWaiting } from './waiting.ts'
 import { waitingLoops } from './waitingLoops.ts'
+import { brainSweepQueue, sweepDue } from './brainSweep.ts'
+import { detectProjectHints } from './projectHints.ts'
+import { localAsk } from './askShared.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg)
@@ -107,5 +110,19 @@ const merged = mergeSyncState(
   { version: 2, thoughts: [{ ...thoughts[0], title: 'Updated', updatedAt: '2026-08-18T12:00:00.000Z' }], learned: [] },
 )
 assert(merged.thoughts[0].title === 'Updated', 'merge newer wins')
+
+const clusterThoughts: Thought[] = [
+  { id: 'c1', text: 'hawaii flight booking', title: 'Flights', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString() },
+  { id: 'c2', text: 'hawaii hotel booking', title: 'Hotels', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString() },
+]
+const hints = detectProjectHints(clusterThoughts, now)
+assert(hints.length >= 1, 'project hints')
+
+const sweep = brainSweepQueue(thoughts, 5, now)
+assert(Array.isArray(sweep), 'brain sweep queue')
+assert(typeof sweepDue() === 'boolean', 'sweep due')
+
+const askHits = localAsk(thoughts, 'sam')
+assert(askHits.some((t) => t.person === 'Sam'), 'local ask')
 
 console.log('features.selftest: all passed')
