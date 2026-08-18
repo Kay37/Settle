@@ -45,13 +45,29 @@ export default function ShortcutsPage() {
           <span className="brand-sub">iOS Shortcuts</span>
         </h1>
         <p className="tagline">
-          Dictate a dump, pin Next 3 to your Home Screen, or share text into
-          Settle — no extra app required.
+          One tap to dump from anywhere — voice, Share Sheet, lock screen, or
+          Action Button. Settle files it; you pick the next 3.
         </p>
       </header>
 
       <section className="panel shortcuts-panel">
         <div className="shortcuts-card">
+          <p className="kicker">How it works</p>
+          <ol className="how-it-works shortcuts-how">
+            <li>
+              <strong>Dump</strong> — dictate, share, or open a URL with your
+              text
+            </li>
+            <li>
+              <strong>Settle</strong> — splits and files automatically (remove{' '}
+              <code>unload=1</code> to review first)
+            </li>
+            <li>
+              <strong>Next 3</strong> — pin the widget or open Settle for today&apos;s
+              picks
+            </li>
+          </ol>
+
           <p className="kicker">Your host</p>
           <code className="shortcuts-url">{origin || '…'}</code>
 
@@ -118,6 +134,16 @@ export default function ShortcutsPage() {
           >
             {copied === 'widget' ? 'Copied' : 'Copy widget URL'}
           </button>
+
+          <h2>Action Button &amp; lock screen</h2>
+          <p>
+            iPhone 15 Pro+: Settings → Action Button → Shortcut → pick your{' '}
+            <strong>Settle</strong> dump shortcut for one-press capture.
+          </p>
+          <p>
+            Lock screen: add a Shortcuts widget that opens your dump URL, or the{' '}
+            <a href="/widget">Next 3 widget page</a>.
+          </p>
 
           <h2>Share into Settle</h2>
           <p>
