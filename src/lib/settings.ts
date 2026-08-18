@@ -3,6 +3,8 @@ export interface Settings {
   /** Optional personal proxy that files dumps. See README. */
   filingEndpoint: string
   filingToken: string
+  /** Local due notifications (installed PWA / supporting browsers). */
+  reminders: boolean
 }
 
 const KEY = 'settle.settings.v1'
@@ -12,6 +14,7 @@ const defaults: Settings = {
   useAi: false,
   filingEndpoint: '',
   filingToken: '',
+  reminders: false,
 }
 
 export function loadSettings(): Settings {
@@ -33,6 +36,7 @@ export function loadSettings(): Settings {
           : typeof parsed.openaiApiKey === 'string'
             ? parsed.openaiApiKey
             : '',
+      reminders: Boolean(parsed.reminders),
     }
   } catch {
     return defaults

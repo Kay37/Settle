@@ -153,7 +153,13 @@ vercel.json                 Vite on Vercel
 8. ~~**Project hints**~~ — keyword clusters + soft tag.
 9. ~~**Semantic Ask**~~ — `/api/ask` when smart filing on.
 10. ~~**Richer dates**~~ — this weekend, in 2 weeks, before visit.
-11. **Custom domain** on Vercel (optional).
+11. ~~**Gentle insights**~~ — local nudges on Today brief.
+12. ~~**Web Share**~~ — share next 3 / thoughts via iOS share sheet.
+13. ~~**Mind-changed re-file**~~ — prompt when an edit shifts category.
+14. ~~**iOS widget**~~ — compact `/widget` Next 3 page + Shortcuts pin steps.
+15. ~~**Share into Settle**~~ — Web Share Target + iOS Share shortcut.
+16. ~~**Due reminders + calendar**~~ — optional local notifications; .ics on dated thoughts.
+17. **Custom domain** on Vercel (optional).
 
 ---
 

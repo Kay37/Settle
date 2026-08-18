@@ -14,6 +14,9 @@ import { detectProjectHints } from './projectHints.ts'
 import { localAsk } from './askShared.ts'
 import { gentleInsights } from './insights.ts'
 import { looksLikeMindChanged, suggestedCategoryAfterEdit } from './mindChanged.ts'
+import { nextThree } from './rank.ts'
+import { thoughtToIcs } from './calendar.ts'
+import { dueForReminder } from './reminders.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg)
@@ -142,5 +145,28 @@ const insightThoughts: Thought[] = [
   { id: 'c3', text: 'pack for hawaii', title: 'Pack', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString(), project: 'Hawaii trip' },
 ]
 assert(gentleInsights(insightThoughts, now).length >= 1, 'gentle insights')
+
+const ranked = nextThree([
+  { id: 'n1', text: 'buy milk today', title: 'buy milk', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString(), dueAt: now.toISOString() },
+  { id: 'n2', text: 'wifi password', title: 'wifi', category: 'note', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString() },
+], now)
+assert(ranked.length === 1 && ranked[0].id === 'n1', 'next three skips notes')
+
+const ics = thoughtToIcs({
+  id: 'cal1',
+  text: 'dentist',
+  title: 'dentist',
+  category: 'do',
+  status: 'open',
+  createdAt: now.toISOString(),
+  updatedAt: now.toISOString(),
+  dueAt: '2026-08-18T15:00:00.000Z',
+})
+assert(ics !== null && ics.includes('BEGIN:VEVENT') && ics.includes('dentist'), 'ics export')
+
+const remind = dueForReminder([
+  { id: 'd1', text: 'pay bill', title: 'pay bill', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString(), dueAt: '2026-08-17T12:00:00.000Z' },
+], now)
+assert(remind.length === 1, 'due reminder')
 
 console.log('features.selftest: all passed')
