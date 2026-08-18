@@ -1,6 +1,8 @@
 import type { Thought } from '../types'
 import { isActive } from './assign'
 
+const trip = /\b(trip|vacation|flight|hotel|travel|hawaii|passport)\b/i
+
 const STOP = new Set([
   'the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'need', 'want',
   'about', 'before', 'after', 'when', 'what', 'text', 'call', 'buy', 'get',
@@ -47,7 +49,11 @@ export function detectProjectHints(
       if (used.has(open[j].id)) continue
       const tj = tokens(open[j].text)
       const overlap = tj.filter((w) => shared.has(w))
-      if (overlap.length >= 2) {
+      const tripPair =
+        overlap.length >= 1 &&
+        trip.test(open[i].text) &&
+        trip.test(open[j].text)
+      if (overlap.length >= 2 || tripPair) {
         group.push(open[j])
         overlap.forEach((w) => shared.add(w))
       }
@@ -66,7 +72,6 @@ export function detectProjectHints(
 
 function titleFromKeywords(keywords: string[], thoughts: Thought[]): string {
   const joined = keywords.join(' ')
-  const trip = /\b(trip|vacation|flight|hotel|travel|hawaii|passport)\b/i
   if (thoughts.some((t) => trip.test(t.text)) || trip.test(joined)) {
     const place = keywords.find((k) => k.length > 4) ?? keywords[0]
     return `${cap(place)} trip`

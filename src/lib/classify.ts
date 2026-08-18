@@ -2,7 +2,7 @@ import type { Category, LearnedRule } from '../types'
 import { applyLearned } from './learn'
 
 const DO_WORDS =
-  /\b(buy|get|pick up|grab|call|email|text|schedule|book|pay|fix|send|submit|order|renew|cancel|return|mail|ship|wash|clean|drop off|grocery|groceries|appointment|deadline|todo|to-do|need to|have to|gotta|must|errand|finish|complete|reply|respond|print|pickup)\b/i
+  /\b(buy|get|pick up|grab|call|email|text|schedule|book|pay|fix|send|submit|order|renew|cancel|return|mail|ship|wash|clean|drop off|grocery|groceries|appointment|deadline|todo|to-do|need to|have to|gotta|must|errand|finish|complete|reply|respond|print|pickup|flight|hotel|reservation|passport|visa|rental|airbnb|travel|pack|luggage|check in|check out)\b/i
 
 const PEOPLE_WORDS =
   /\b(mom|dad|mum|mama|papa|sister|brother|friend|partner|wife|husband|girlfriend|boyfriend|fiancé|fiancee|boss|coworker|colleague|dentist|doctor|therapist|landlord|roommate|reach out|follow up|check in|catch up|wish .+ happy|birthday|congrats|congratulate|thank)\b/i
@@ -55,6 +55,14 @@ export function splitDump(raw: string): string[] {
     .filter(Boolean)
 
   if (byLine.length > 1) return byLine
+
+  if (/\s*\+\s*/.test(cleaned)) {
+    const plusParts = cleaned
+      .split(/\s*\+\s*/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 2)
+    if (plusParts.length >= 2) return plusParts
+  }
 
   if ((cleaned.match(/;/g) ?? []).length >= 2) {
     return cleaned
