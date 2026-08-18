@@ -11,6 +11,8 @@ export default function ShortcutsPage() {
     [],
   )
   const shortcutUrl = useMemo(() => sampleUrl(origin), [origin])
+  const widgetUrl = `${origin}/widget`
+  const shareTemplate = `${origin}/?dump=[text]&unload=1`
   const [qr, setQr] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
 
@@ -43,8 +45,8 @@ export default function ShortcutsPage() {
           <span className="brand-sub">iOS Shortcuts</span>
         </h1>
         <p className="tagline">
-          Dictate or type a brain dump on your phone — Settle files it before
-          you open the app.
+          Dictate a dump, pin Next 3 to your Home Screen, or share text into
+          Settle — no extra app required.
         </p>
       </header>
 
@@ -60,7 +62,7 @@ export default function ShortcutsPage() {
             </div>
           )}
 
-          <h2>Build the Shortcut</h2>
+          <h2>Dump shortcut</h2>
           <ol className="shortcuts-steps">
             <li>Open the <strong>Shortcuts</strong> app → <strong>New Shortcut</strong>.</li>
             <li>Add <strong>Ask for Input</strong> (or <strong>Dictate Text</strong>).</li>
@@ -75,14 +77,14 @@ export default function ShortcutsPage() {
               className="sync-textarea"
               readOnly
               rows={3}
-              value={`${origin}/?dump=[text]&unload=1`}
+              value={shareTemplate}
             />
           </label>
           <div className="dump-actions">
             <button
               type="button"
               className="btn-primary"
-              onClick={() => copy(`${origin}/?dump=[text]&unload=1`, 'template')}
+              onClick={() => copy(shareTemplate, 'template')}
             >
               {copied === 'template' ? 'Copied' : 'Copy template'}
             </button>
@@ -94,6 +96,39 @@ export default function ShortcutsPage() {
               {copied === 'sample' ? 'Copied' : 'Copy sample URL'}
             </button>
           </div>
+
+          <h2>Today widget</h2>
+          <p>
+            iOS can&apos;t run a native WidgetKit widget for a web app, so this
+            is the close equivalent: a compact Next 3 page you pin as a Home
+            Screen icon or a Shortcuts widget.
+          </p>
+          <ol className="shortcuts-steps">
+            <li>Open <a href="/widget">{widgetUrl || '/widget'}</a> in Safari.</li>
+            <li>Share → <strong>Add to Home Screen</strong> → name it <strong>Next 3</strong>.</li>
+            <li>
+              Or: Shortcuts → New → <strong>Open URLs</strong> → paste the
+              widget URL → Add to Home Screen / lock-screen widget.
+            </li>
+          </ol>
+          <button
+            type="button"
+            className="btn-ghost light"
+            onClick={() => copy(widgetUrl, 'widget')}
+          >
+            {copied === 'widget' ? 'Copied' : 'Copy widget URL'}
+          </button>
+
+          <h2>Share into Settle</h2>
+          <p>
+            On iPhone: Shortcuts → New → set it to receive <strong>Text</strong>{' '}
+            from Share Sheet → Open URL with the dump template. Then Share from
+            Notes, Mail, or Safari into Settle.
+          </p>
+          <p>
+            On Android Chrome (installed PWA): use <strong>Share → Settle</strong>{' '}
+            — the dump box fills from the shared text.
+          </p>
 
           <p className="thought-meta" style={{ marginTop: '1rem' }}>
             <code>unload=1</code> auto-submits the dump. Remove it to review
