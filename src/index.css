@@ -1075,6 +1075,56 @@ button {
   border-top: 1px solid var(--line);
 }
 
+.project-section.is-prominent {
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.9rem 0.95rem;
+  border: 1px solid rgba(212, 162, 76, 0.45);
+  border-radius: 16px;
+  background: rgba(212, 162, 76, 0.12);
+}
+
+.project-section.is-prominent .radar-head h3 {
+  color: var(--ink);
+}
+
+.insights-list {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(47, 111, 106, 0.08);
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.insights-list li {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: rgba(20, 32, 28, 0.72);
+  font-weight: 550;
+}
+
+.refile-card {
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  background: rgba(212, 162, 76, 0.14);
+  border: 1px solid rgba(212, 162, 76, 0.28);
+}
+
+.refile-card p {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.refile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
 .project-list {
   display: grid;
   gap: 0.55rem;

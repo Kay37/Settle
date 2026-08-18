@@ -12,6 +12,8 @@ import { waitingLoops } from './waitingLoops.ts'
 import { brainSweepQueue, sweepDue } from './brainSweep.ts'
 import { detectProjectHints } from './projectHints.ts'
 import { localAsk } from './askShared.ts'
+import { gentleInsights } from './insights.ts'
+import { looksLikeMindChanged, suggestedCategoryAfterEdit } from './mindChanged.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg)
@@ -130,5 +132,15 @@ assert(typeof sweepDue() === 'boolean', 'sweep due')
 
 const askHits = localAsk(thoughts, 'sam')
 assert(askHits.some((t) => t.person === 'Sam'), 'local ask')
+
+assert(looksLikeMindChanged('buy milk', 'worried about the meeting'), 'mind changed')
+assert(!looksLikeMindChanged('buy milk', 'buy milks'), 'typo not mind change')
+assert(suggestedCategoryAfterEdit('worried about talk', 'do') === 'worry', 'refile suggest')
+
+const insightThoughts: Thought[] = [
+  ...clusterThoughts,
+  { id: 'c3', text: 'pack for hawaii', title: 'Pack', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString(), project: 'Hawaii trip' },
+]
+assert(gentleInsights(insightThoughts, now).length >= 1, 'gentle insights')
 
 console.log('features.selftest: all passed')

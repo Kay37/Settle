@@ -38,7 +38,10 @@ import { createRecognizer, speechSupported } from './lib/speech'
 import { peopleRadar, staleLabel } from './lib/peopleRadar'
 import { personDraft, personMessage } from './lib/personDraft'
 import { previewDraft } from './lib/preview'
-import { detectProjectHints } from './lib/projectHints'
+import { detectProjectHints, type ProjectHint } from './lib/projectHints'
+import { gentleInsights } from './lib/insights'
+import { looksLikeMindChanged, suggestedCategoryAfterEdit } from './lib/mindChanged'
+import { canShare, shareText } from './lib/share'
 import { exportJson, loadState, saveState, uid } from './lib/storage'
 import { fromSyncCode, mergeSyncState, toSyncCode } from './lib/syncCode'
 import { staleDays, staleSweep } from './lib/staleSweep'
@@ -140,6 +143,7 @@ export default function App() {
   const interimRef = useRef('')
   const baseDraftRef = useRef('')
   const dumpShellRef = useRef<HTMLElement>(null)
+  const projectSectionRef = useRef<HTMLDivElement>(null)
 
   const hour = new Date().getHours()
   const session = greetingForHour(hour)
@@ -309,7 +313,9 @@ export default function App() {
   }, [ask, thoughts, settings.useAi, settings.filingToken])
 
   const projectHints = useMemo(() => detectProjectHints(thoughts), [thoughts])
+  const insights = useMemo(() => gentleInsights(thoughts), [thoughts])
   const sweepCandidates = useMemo(() => brainSweepQueue(thoughts), [thoughts])
+  const [canNativeShare] = useState(() => canShare())
 
   function startBrainSweep() {
     setSweepQueue(brainSweepQueue(thoughts))
@@ -424,6 +430,19 @@ export default function App() {
 
       const worries = created.filter((t) => t.category === 'worry')
       if (worries.length) setWorryBatch(worries)
+
+      const createdIds = new Set(created.map((t) => t.id))
+      const freshHints = detectProjectHints([...created, ...thoughts])
+      if (
+        freshHints.some((hint) => hint.thoughts.some((t) => createdIds.has(t.id)))
+      ) {
+        window.setTimeout(() => {
+          projectSectionRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest',
+          })
+        }, 120)
+      }
 
       setView('brief')
     } finally {
@@ -560,10 +579,21 @@ export default function App() {
     }
   }
 
+  async function shareBrief() {
+    const lines = nextThree.map(
+      (t, i) => `${i + 1}. ${t.nextAction || t.title}${t.person ? ` (${t.person})` : ''}`,
+    )
+    const text = ['Settle — next 3', ...lines].join('\n')
+    const ok = await shareText('Settle — next 3', text)
+    flash(ok ? 'Shared next 3' : 'Share not available')
+  }
+
   const rowProps = {
     onUpdate: updateThought,
     onRemove: removeThought,
     onSnooze: snooze,
+    onFlash: flash,
+    canShare: canNativeShare,
   }
 
   return (
@@ -602,7 +632,7 @@ export default function App() {
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Brain dump here… “text Sam tomorrow”, “buy oat milk today”, ideas, worries."
+          placeholder="Brain dump here… separate items with + or new lines. “text Sam tomorrow”, “buy oat milk today”."
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
               e.preventDefault()
@@ -722,6 +752,22 @@ export default function App() {
             <h2>What now</h2>
             <p>{briefIntro(activeOpen.length)}</p>
 
+            <div ref={projectSectionRef}>
+              <ProjectHintsPanel
+                hints={projectHints}
+                onTag={tagProject}
+                prominent
+              />
+            </div>
+
+            {insights.length > 0 && (
+              <ul className="insights-list" aria-label="Gentle insights">
+                {insights.map((item) => (
+                  <li key={item.id}>{item.text}</li>
+                ))}
+              </ul>
+            )}
+
             {nextThree.length > 0 && (
               <div className="next-list" aria-label="Next three">
                 {nextThree.map((t, i) => (
@@ -755,43 +801,17 @@ export default function App() {
               <button type="button" className="btn-ghost" onClick={copyBrief}>
                 Copy next 3
               </button>
+              {canNativeShare && nextThree.length > 0 && (
+                <button type="button" className="btn-ghost" onClick={shareBrief}>
+                  Share next 3
+                </button>
+              )}
               {sweepCandidates.length > 0 && (
                 <button type="button" className="btn-ghost" onClick={startBrainSweep}>
                   Brain sweep{sweepDue() ? '' : ' ✓'}
                 </button>
               )}
             </div>
-
-            {projectHints.length > 0 && (
-              <div className="project-section" aria-label="Project hints">
-                <div className="radar-head">
-                  <h3>Same project?</h3>
-                  <p>These open loops share keywords — group if you want.</p>
-                </div>
-                <div className="project-list">
-                  {projectHints.map((hint) => (
-                    <div key={hint.name} className="project-card">
-                      <p className="radar-action">{hint.name}</p>
-                      <p className="thought-meta">
-                        {hint.thoughts.length} thoughts · {hint.keywords.join(', ')}
-                      </p>
-                      <button
-                        type="button"
-                        className="done-mini"
-                        onClick={() =>
-                          tagProject(
-                            hint.name,
-                            hint.thoughts.map((t) => t.id),
-                          )
-                        }
-                      >
-                        Tag project
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {waitingItems.length > 0 && (
               <div className="waiting-section" aria-label="Waiting for">
@@ -951,6 +971,7 @@ export default function App() {
 
       {view === 'all' && (
         <section className="panel" aria-label="All thoughts">
+          <ProjectHintsPanel hints={projectHints} onTag={tagProject} prominent />
           <div className="search-row">
             <input
               type="search"
@@ -1390,6 +1411,47 @@ function SettingsModal({
   )
 }
 
+function ProjectHintsPanel({
+  hints,
+  onTag,
+  prominent,
+}: {
+  hints: ProjectHint[]
+  onTag: (name: string, ids: string[]) => void
+  prominent?: boolean
+}) {
+  if (!hints.length) return null
+
+  return (
+    <section
+      className={`project-section${prominent ? ' is-prominent' : ''}`}
+      aria-label="Project hints"
+    >
+      <div className="radar-head">
+        <h3>Same project?</h3>
+        <p>These open loops share keywords — group if you want.</p>
+      </div>
+      <div className="project-list">
+        {hints.map((hint) => (
+          <div key={hint.name} className="project-card">
+            <p className="radar-action">{hint.name}</p>
+            <p className="thought-meta">
+              {hint.thoughts.length} thoughts · {hint.keywords.join(', ')}
+            </p>
+            <button
+              type="button"
+              className="done-mini"
+              onClick={() => onTag(hint.name, hint.thoughts.map((t) => t.id))}
+            >
+              Tag project
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function BriefSection({
   title,
   items,
@@ -1397,6 +1459,8 @@ function BriefSection({
   onUpdate,
   onRemove,
   onSnooze,
+  onFlash,
+  canShare: canShareProp,
 }: {
   title: string
   items: Thought[]
@@ -1404,6 +1468,8 @@ function BriefSection({
   onUpdate: (id: string, patch: Partial<Thought>) => void
   onRemove: (id: string) => void
   onSnooze: (id: string, kind: 'tonight' | 'tomorrow' | 'weekend') => void
+  onFlash: (message: string) => void
+  canShare: boolean
 }) {
   return (
     <div className="brief-section">
@@ -1421,6 +1487,8 @@ function BriefSection({
               onUpdate={onUpdate}
               onRemove={onRemove}
               onSnooze={onSnooze}
+              onFlash={onFlash}
+              canShare={canShareProp}
               compact
             />
           ))}
@@ -1435,6 +1503,8 @@ function ThoughtRow({
   onUpdate,
   onRemove,
   onSnooze,
+  onFlash,
+  canShare: canShareProp,
   compact,
   style,
 }: {
@@ -1442,16 +1512,20 @@ function ThoughtRow({
   onUpdate: (id: string, patch: Partial<Thought>) => void
   onRemove: (id: string) => void
   onSnooze: (id: string, kind: 'tonight' | 'tomorrow' | 'weekend') => void
+  onFlash: (message: string) => void
+  canShare: boolean
   compact?: boolean
   style?: CSSProperties
 }) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(thought.text)
+  const [refileCategory, setRefileCategory] = useState<Category | null>(null)
   const due = dueLabel(thought.dueAt)
   const overdue = due === 'Overdue' || due === 'Due now'
 
   useEffect(() => {
     setText(thought.text)
+    setRefileCategory(null)
   }, [thought.text])
 
   function saveEdit() {
@@ -1459,6 +1533,8 @@ function ThoughtRow({
     if (!next) return
     const a = assign(next)
     const waiting = isWaiting(next)
+    const mindChanged = looksLikeMindChanged(thought.text, next)
+    const suggested = suggestedCategoryAfterEdit(next, thought.category)
     onUpdate(thought.id, {
       text: next,
       title: a.nextAction || titleFromText(next),
@@ -1469,6 +1545,18 @@ function ThoughtRow({
       category: waiting ? 'people' : thought.category,
     })
     setEditing(false)
+    if (mindChanged && suggested) {
+      setRefileCategory(suggested)
+      onFlash(`Sounds more like ${labelFor(suggested)} now`)
+    }
+  }
+
+  async function shareThought() {
+    const ok = await shareText(
+      thought.nextAction || thought.title,
+      thought.text,
+    )
+    onFlash(ok ? 'Shared' : 'Share not available')
   }
 
   return (
@@ -1521,6 +1609,31 @@ function ThoughtRow({
           {labelFor(thought.category)}
         </span>
       </div>
+      {refileCategory && (
+        <div className="refile-card">
+          <p>Re-file as {labelFor(refileCategory)}?</p>
+          <div className="refile-actions">
+            <button
+              type="button"
+              className="done-mini"
+              onClick={() => {
+                onUpdate(thought.id, { category: refileCategory })
+                setRefileCategory(null)
+                onFlash(`Re-filed as ${labelFor(refileCategory)}`)
+              }}
+            >
+              Yes
+            </button>
+            <button
+              type="button"
+              className="done-mini"
+              onClick={() => setRefileCategory(null)}
+            >
+              Keep {labelFor(thought.category)}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="thought-actions">
         {editing ? (
           <>
@@ -1589,6 +1702,11 @@ function ThoughtRow({
             <button type="button" onClick={() => setEditing(true)}>
               Edit
             </button>
+            {canShareProp && (
+              <button type="button" onClick={shareThought}>
+                Share
+              </button>
+            )}
             <select
               aria-label="Change category"
               value={thought.category}
