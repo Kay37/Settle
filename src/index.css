@@ -1,1 +1,45 @@
-PLACEHOLDER
+:root {
+  --black: #1b3d2f;
+  --charcoal: #163328;
+  --ink: #14201c;
+  --teal: #2f6f6a;
+  --teal-dark: #255a56;
+  --gold: #d4a24c;
+  --gold-dark: #c08f3a;
+  --cream: #f7f3ea;
+  --sand: #e7e0d2;
+  --white: #fffcf7;
+  --line: rgba(27, 61, 47, 0.14);
+  --shadow: 0 22px 50px rgba(22, 51, 40, 0.22);
+  --radius: 18px;
+  --font-display: 'Bebas Neue', Impact, sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  color-scheme: light;
+}
+
+.insights-list {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(47, 111, 106, 0.08);
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.refile-card {
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  background: rgba(212, 162, 76, 0.14);
+  border: 1px solid rgba(212, 162, 76, 0.28);
+}
+
+.project-section.is-prominent {
+  margin-top: 0.85rem;
+  padding: 0.85rem 0.9rem 0.95rem;
+  border: 1px solid rgba(212, 162, 76, 0.45);
+  border-radius: 16px;
+  background: rgba(212, 162, 76, 0.12);
+}
