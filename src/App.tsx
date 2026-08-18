@@ -1,1 +1,1 @@
-PLACEHOLDER_WILL_USE_FILE
+@/tmp/settle-clone/src/App.tsx
