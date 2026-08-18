@@ -21,7 +21,7 @@ export default function WidgetPage() {
         <p className="kicker">Settle · Today</p>
         <h1>Next 3</h1>
         {items.length === 0 ? (
-          <p className="widget-empty">Head is clear. Dump anything in Settle.</p>
+          <p className="widget-empty">Head is clear. Get it off your mind in Settle.</p>
         ) : (
           <ol className="widget-list">
             {items.map((t, i) => (
