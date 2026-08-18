@@ -1,1 +1,1 @@
-@/tmp/settle-clone/src/App.tsx
+PLACEHOLDER
