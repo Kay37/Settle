@@ -22,9 +22,9 @@ export function peopleRadar(
 ): PersonLoop[] {
   const open = thoughts.filter(
     (t) =>
-      t.status === 'open' &&
+      (t.status === 'open' || t.status === 'waiting') &&
       isActive(t.snoozeUntil, now) &&
-      (t.category === 'people' || Boolean(t.person)),
+      (t.category === 'people' || t.status === 'waiting' || Boolean(t.person)),
   )
 
   const byPerson = new Map<string, Thought[]>()

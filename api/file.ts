@@ -83,16 +83,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized — set Bearer token to FILING_SECRET' })
   }
 
-  const chunks = (req.body as { chunks?: unknown })?.chunks
+  const body = req.body as { chunks?: unknown; learned?: unknown }
+  const chunks = body.chunks
   if (!Array.isArray(chunks) || !chunks.every((c) => typeof c === 'string')) {
     return res.status(400).json({ error: 'chunks: string[] required' })
   }
+
+  const learnedRaw = body.learned
+  const learned = Array.isArray(learnedRaw)
+    ? learnedRaw.filter(
+        (r): r is { phrase: string; category: Category } =>
+          typeof r === 'object' &&
+          r !== null &&
+          typeof (r as { phrase?: unknown }).phrase === 'string' &&
+          isCategory((r as { category?: unknown }).category),
+      )
+    : []
 
   if (chunks.length > 40) {
     return res.status(400).json({ error: 'Max 40 chunks per request' })
   }
 
-  const fallback = fileLocally(chunks)
+  const fallback = fileLocally(chunks, learned)
   const apiKey = process.env.OPENAI_API_KEY?.trim()
 
   if (apiKey) {

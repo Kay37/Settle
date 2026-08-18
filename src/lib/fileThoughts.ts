@@ -56,7 +56,7 @@ export async function fileWithEndpoint(
     const res = await fetch(endpoint.trim(), {
       method: 'POST',
       headers,
-      body: JSON.stringify({ chunks }),
+      body: JSON.stringify({ chunks, learned }),
     })
 
     if (!res.ok) return fallback

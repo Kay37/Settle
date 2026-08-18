@@ -7,6 +7,12 @@ import {
 } from 'react'
 import type { Category, LearnedRule, Thought } from './types'
 import { CATEGORIES } from './types'
+import WorryFollowUp, { revisitFridayIso } from './components/WorryFollowUp'
+import { findClarifyPrompts } from './lib/clarify'
+import { findEchoes } from './lib/duplicates'
+import { settleSummary } from './lib/settleSummary'
+import { isWaiting } from './lib/waiting'
+import { waitingLabel, waitingLoops } from './lib/waitingLoops'
 import {
   assign,
   dueLabel,
@@ -35,6 +41,7 @@ import { staleDays, staleSweep } from './lib/staleSweep'
 import './index.css'
 
 type View = 'brief' | 'all' | 'ask'
+type ListFilter = Category | 'all' | 'due' | 'waiting'
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -105,7 +112,7 @@ export default function App() {
   const [learned, setLearned] = useState<LearnedRule[]>(() => initial.learned)
   const [draft, setDraft] = useState('')
   const [view, setView] = useState<View>('brief')
-  const [filter, setFilter] = useState<Category | 'all' | 'due'>('all')
+  const [filter, setFilter] = useState<ListFilter>('all')
   const [query, setQuery] = useState('')
   const [ask, setAsk] = useState('')
   const [hideDone, setHideDone] = useState(true)
@@ -116,6 +123,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState<Settings>(() => loadSettings())
   const [canSpeak] = useState(() => speechSupported())
+  const [clarifyAnswers, setClarifyAnswers] = useState<Record<number, Category>>({})
+  const [worryBatch, setWorryBatch] = useState<Thought[] | null>(null)
+  const [reliefPulse, setReliefPulse] = useState(false)
   const autoUnloadedRef = useRef(false)
   const recognizerRef = useRef<ReturnType<typeof createRecognizer>>(null)
   const interimRef = useRef('')
@@ -135,7 +145,8 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return
-    const t = window.setTimeout(() => setToast(null), undoIds ? 5000 : 2400)
+    const ms = undoIds ? 6000 : toast.includes('Settled') ? 4500 : 2400
+    const t = window.setTimeout(() => setToast(null), ms)
     return () => window.clearTimeout(t)
   }, [toast, undoIds])
 
@@ -166,12 +177,32 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    setClarifyAnswers({})
+  }, [draft])
+
   const activeOpen = useMemo(
     () =>
       thoughts.filter(
         (t) => t.status === 'open' && isActive(t.snoozeUntil),
       ),
     [thoughts],
+  )
+
+  const waitingItems = useMemo(() => waitingLoops(thoughts), [thoughts])
+
+  const draftChunks = useMemo(
+    () => (draft.trim() ? splitDump(draft) : []),
+    [draft],
+  )
+
+  const clarifyPrompts = useMemo(
+    () => findClarifyPrompts(draftChunks, learned),
+    [draftChunks, learned],
+  )
+
+  const needsClarify = clarifyPrompts.some(
+    (p) => clarifyAnswers[p.chunkIndex] === undefined,
   )
 
   const nextThree = useMemo(
@@ -204,7 +235,8 @@ export default function App() {
   const filtered = useMemo(() => {
     let list = thoughts
     if (hideDone) list = list.filter((t) => t.status !== 'done')
-    if (filter === 'due') list = list.filter((t) => Boolean(t.dueAt) && t.status === 'open')
+    if (filter === 'waiting') list = list.filter((t) => t.status === 'waiting')
+    else if (filter === 'due') list = list.filter((t) => Boolean(t.dueAt) && t.status === 'open')
     else if (filter !== 'all') list = list.filter((t) => t.category === filter)
     const q = query.trim().toLowerCase()
     if (q) {
@@ -252,13 +284,13 @@ export default function App() {
     setToast(message)
   }
 
-  async function unloadText(raw: string) {
+  async function unloadText(raw: string, answers = clarifyAnswers) {
     const chunks = splitDump(raw)
     if (!chunks.length) return
 
     setFiling(true)
     try {
-      const filed =
+      let filed =
         settings.useAi && settings.filingEndpoint.trim()
           ? await fileWithEndpoint(
               chunks,
@@ -268,41 +300,52 @@ export default function App() {
             )
           : fileLocally(chunks, learned)
 
-      const now = new Date().toISOString()
-      const created: Thought[] = filed.map((item) => ({
-        id: uid(),
-        text: item.text,
-        title: item.title,
-        category: item.category,
-        status: 'open',
-        createdAt: now,
-        updatedAt: now,
-        dueAt: item.dueAt,
-        person: item.person,
-        nextAction: item.nextAction,
-        snoozeUntil: null,
+      filed = filed.map((item, index) => ({
+        ...item,
+        category: answers[index] ?? item.category,
       }))
+
+      const now = new Date().toISOString()
+      const created: Thought[] = filed.map((item) => {
+        const waiting = isWaiting(item.text)
+        return {
+          id: uid(),
+          text: item.text,
+          title: item.title,
+          category: waiting ? 'people' : item.category,
+          status: waiting ? 'waiting' : 'open',
+          createdAt: now,
+          updatedAt: now,
+          dueAt: item.dueAt,
+          person: item.person,
+          nextAction: item.nextAction,
+          snoozeUntil: null,
+        }
+      })
 
       setThoughts((prev) => [...created, ...prev])
       setUndoIds(created.map((t) => t.id))
       setDraft('')
+      setClarifyAnswers({})
       interimRef.current = ''
       baseDraftRef.current = ''
 
-      const first = created[0]
-      const extra = [
-        first ? labelFor(first.category) : null,
-        first?.person,
-        first?.dueAt ? dueLabel(first.dueAt) : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-
-      flash(
-        created.length === 1
-          ? `Filed ${extra} · Undo`
-          : `Filed ${created.length} · assigned · Undo`,
+      const ranked = rankOpen(
+        created.filter(
+          (t) =>
+            t.status === 'open' &&
+            (t.category === 'do' || t.category === 'people'),
+        ),
       )
+      const summary = settleSummary(created, ranked[0] ?? null)
+      flash(`${summary} · Undo`)
+
+      setReliefPulse(true)
+      window.setTimeout(() => setReliefPulse(false), 700)
+
+      const worries = created.filter((t) => t.category === 'worry')
+      if (worries.length) setWorryBatch(worries)
+
       setView('brief')
     } finally {
       setFiling(false)
@@ -310,6 +353,10 @@ export default function App() {
   }
 
   function unload() {
+    if (needsClarify) {
+      flash('Answer the quick question first')
+      return
+    }
     void unloadText(draft)
   }
 
@@ -468,7 +515,11 @@ export default function App() {
         <p className="session">{session}</p>
       </header>
 
-      <section className="dump-shell" aria-label="Dump box" ref={dumpShellRef}>
+      <section
+        className={`dump-shell${reliefPulse ? ' settled-pulse' : ''}`}
+        aria-label="Dump box"
+        ref={dumpShellRef}
+      >
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -484,29 +535,64 @@ export default function App() {
         />
         {draftPreview.length > 0 && (
           <div className="preview-row" aria-label="Filing preview">
-            {draftPreview.map((item, i) => (
-              <span
-                key={`${i}-${item.text.slice(0, 24)}`}
-                className={`preview-chip ${item.category}`}
-                title={item.text}
-              >
-                <span className="preview-cat">{labelFor(item.category)}</span>
-                <span className="preview-title">{item.title}</span>
-                {item.person && (
-                  <span className="preview-meta">{item.person}</span>
-                )}
-                {item.dueLabel && (
-                  <span className="preview-meta due">{item.dueLabel}</span>
-                )}
-              </span>
-            ))}
+            {draftPreview.map((item, i) => {
+              const echo = findEchoes(item.text, thoughts, 1)[0]
+              return (
+                <span
+                  key={`${i}-${item.text.slice(0, 24)}`}
+                  className={`preview-chip ${clarifyAnswers[i] ?? item.category}${echo ? ' has-echo' : ''}`}
+                  title={item.text}
+                >
+                  <span className="preview-cat">
+                    {labelFor(clarifyAnswers[i] ?? item.category)}
+                  </span>
+                  <span className="preview-title">{item.title}</span>
+                  {item.person && (
+                    <span className="preview-meta">{item.person}</span>
+                  )}
+                  {item.dueLabel && (
+                    <span className="preview-meta due">{item.dueLabel}</span>
+                  )}
+                  {echo && (
+                    <span className="preview-meta echo" title={echo.text}>
+                      Echo
+                    </span>
+                  )}
+                </span>
+              )
+            })}
           </div>
+        )}
+        {clarifyPrompts.map((prompt) => (
+          <div key={prompt.chunkIndex} className="clarify-card">
+            <p className="clarify-q">{prompt.question}</p>
+            <div className="clarify-choices">
+              {prompt.choices.map((choice) => (
+                <button
+                  key={choice.label}
+                  type="button"
+                  className={`clarify-btn${clarifyAnswers[prompt.chunkIndex] === choice.category ? ' is-active' : ''}`}
+                  onClick={() =>
+                    setClarifyAnswers((prev) => ({
+                      ...prev,
+                      [prompt.chunkIndex]: choice.category,
+                    }))
+                  }
+                >
+                  {choice.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        {draftPreview.some((item) => findEchoes(item.text, thoughts, 1)[0]) && (
+          <p className="echo-hint">Echo — you&apos;ve dumped something like this before</p>
         )}
         <div className="dump-actions">
           <button
             type="button"
             className="btn-primary"
-            disabled={!draft.trim() || filing}
+            disabled={!draft.trim() || filing || needsClarify}
             onClick={unload}
           >
             {filing ? 'Settling…' : 'Settle'}
@@ -591,6 +677,46 @@ export default function App() {
                 Copy next 3
               </button>
             </div>
+
+            {waitingItems.length > 0 && (
+              <div className="waiting-section" aria-label="Waiting for">
+                <div className="radar-head">
+                  <h3>Waiting for</h3>
+                  <p>Ball&apos;s in their court — not your next action</p>
+                </div>
+                <div className="stale-list">
+                  {waitingItems.slice(0, 5).map((t) => (
+                    <div key={t.id} className="waiting-card">
+                      <div className="stale-top">
+                        {t.person && (
+                          <span className="radar-person">{t.person}</span>
+                        )}
+                        <span className="radar-stale">{waitingLabel(t)}</span>
+                      </div>
+                      <p className="radar-action">{t.nextAction || t.title}</p>
+                      <div className="radar-actions">
+                        <button
+                          type="button"
+                          className="done-mini"
+                          onClick={() =>
+                            updateThought(t.id, { status: 'open' })
+                          }
+                        >
+                          Got reply
+                        </button>
+                        <button
+                          type="button"
+                          className="done-mini"
+                          onClick={() => updateThought(t.id, { status: 'done' })}
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {staleItems.length > 0 && (
               <div className="stale-section" aria-label="Stale sweep">
@@ -742,6 +868,13 @@ export default function App() {
             >
               Dated
             </button>
+            <button
+              type="button"
+              aria-pressed={filter === 'waiting'}
+              onClick={() => setFilter('waiting')}
+            >
+              Waiting
+            </button>
             {CATEGORIES.map((c) => (
               <button
                 key={c.id}
@@ -851,6 +984,35 @@ export default function App() {
           onClose={() => setSettingsOpen(false)}
           onChange={setSettings}
           onFlash={flash}
+          onLearnedChange={setLearned}
+          onClearAll={() => {
+            setThoughts([])
+            setLearned([])
+            flash('All local data cleared')
+          }}
+        />
+      )}
+
+      {worryBatch && worryBatch.length > 0 && (
+        <WorryFollowUp
+          worries={worryBatch}
+          onLeave={() => setWorryBatch(null)}
+          onPrepStep={(w) => {
+            setDraft(`prep for: ${w.text.replace(/^worried?\s+(about\s+)?/i, '').trim()}`)
+            setWorryBatch(null)
+            dumpShellRef.current?.scrollIntoView({ behavior: 'smooth' })
+            flash('Small prep step in dump box')
+          }}
+          onRevisit={(id) => {
+            updateThought(id, { snoozeUntil: revisitFridayIso() })
+            flash('Will resurface Friday')
+          }}
+          onDone={(id) => {
+            updateThought(id, { status: 'done' })
+            setWorryBatch(null)
+            flash('Worry cleared')
+          }}
+          onClose={() => setWorryBatch(null)}
         />
       )}
     </div>
@@ -863,6 +1025,8 @@ function SettingsModal({
   learned,
   onChange,
   onImport,
+  onLearnedChange,
+  onClearAll,
   onClose,
   onFlash,
 }: {
@@ -871,6 +1035,8 @@ function SettingsModal({
   learned: LearnedRule[]
   onChange: (s: Settings) => void
   onImport: (state: { thoughts: Thought[]; learned: LearnedRule[] }) => void
+  onLearnedChange: (rules: LearnedRule[]) => void
+  onClearAll: () => void
   onClose: () => void
   onFlash: (message: string) => void
 }) {
@@ -1026,6 +1192,52 @@ function SettingsModal({
           </button>
         </div>
 
+        {learned.length > 0 && (
+          <div className="learned-section">
+            <h3>What Settle learned</h3>
+            <p>From when you recategorize — tap to remove.</p>
+            <ul className="learned-list">
+              {learned.map((rule) => (
+                <li key={rule.phrase}>
+                  <span className="learned-phrase">{rule.phrase}</span>
+                  <span className={`cat-pill ${rule.category}`}>
+                    {CATEGORIES.find((c) => c.id === rule.category)?.label}
+                  </span>
+                  <button
+                    type="button"
+                    className="learned-remove"
+                    aria-label={`Forget ${rule.phrase}`}
+                    onClick={() =>
+                      onLearnedChange(learned.filter((r) => r.phrase !== rule.phrase))
+                    }
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="privacy-section">
+          <h3>Privacy</h3>
+          <p>
+            {thoughts.length} thoughts · {learned.length} learned phrases · all on this
+            device
+          </p>
+          <button
+            type="button"
+            className="btn-ghost light danger"
+            onClick={() => {
+              if (window.confirm('Delete all thoughts and learned rules on this device?')) {
+                onClearAll()
+              }
+            }}
+          >
+            Clear all local data
+          </button>
+        </div>
+
         <button type="button" className="btn-primary" onClick={onClose}>
           Done
         </button>
@@ -1102,19 +1314,22 @@ function ThoughtRow({
     const next = text.trim()
     if (!next) return
     const a = assign(next)
+    const waiting = isWaiting(next)
     onUpdate(thought.id, {
       text: next,
       title: a.nextAction || titleFromText(next),
       dueAt: a.dueAt,
       person: a.person,
       nextAction: a.nextAction,
+      status: waiting ? 'waiting' : thought.status === 'waiting' ? 'open' : thought.status,
+      category: waiting ? 'people' : thought.category,
     })
     setEditing(false)
   }
 
   return (
     <article
-      className={`thought${thought.status === 'done' ? ' is-done' : ''}${overdue ? ' is-overdue' : ''}`}
+      className={`thought${thought.status === 'done' ? ' is-done' : ''}${thought.status === 'waiting' ? ' is-waiting' : ''}${overdue ? ' is-overdue' : ''}`}
       style={style}
     >
       <div className="thought-top">
@@ -1144,6 +1359,9 @@ function ThoughtRow({
                 )}
                 {thought.snoozeUntil && !isActive(thought.snoozeUntil) && (
                   <span className="chip">Snoozed</span>
+                )}
+                {thought.status === 'waiting' && (
+                  <span className="chip waiting">Waiting</span>
                 )}
                 <span className="thought-meta" style={{ margin: 0 }}>
                   {formatWhen(thought.createdAt)}
@@ -1192,6 +1410,17 @@ function ThoughtRow({
                 <button type="button" onClick={() => onSnooze(thought.id, 'tomorrow')}>
                   Tomorrow
                 </button>
+                <button type="button" onClick={() => onSnooze(thought.id, 'weekend')}>
+                  Weekend
+                </button>
+                {(thought.category === 'people' || thought.person) && (
+                  <button
+                    type="button"
+                    onClick={() => onUpdate(thought.id, { status: 'waiting' })}
+                  >
+                    Waiting
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() =>
@@ -1201,6 +1430,14 @@ function ThoughtRow({
                   Later
                 </button>
               </>
+            )}
+            {thought.status === 'waiting' && (
+              <button
+                type="button"
+                onClick={() => onUpdate(thought.id, { status: 'open' })}
+              >
+                Got reply
+              </button>
             )}
             <button type="button" onClick={() => setEditing(true)}>
               Edit

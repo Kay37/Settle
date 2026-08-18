@@ -6,7 +6,7 @@ export type Category =
   | 'later'
   | 'note'
 
-export type ThoughtStatus = 'open' | 'done' | 'parked'
+export type ThoughtStatus = 'open' | 'done' | 'parked' | 'waiting'
 
 export interface LearnedRule {
   phrase: string
