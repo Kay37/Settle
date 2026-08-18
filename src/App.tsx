@@ -12,7 +12,12 @@ import BrainSweep from './components/BrainSweep'
 import { askWithEndpoint, localAsk } from './lib/askShared'
 import { brainSweepQueue, markSweepDone, sweepDue } from './lib/brainSweep'
 import { findClarifyPrompts } from './lib/clarify'
-import { findEchoes } from './lib/duplicates'
+import { setOpenLoopBadge } from './lib/badge'
+import { carriedOverOpen } from './lib/carriedOver'
+import { findEchoes, mentionCount } from './lib/duplicates'
+import { settleHaptic } from './lib/haptic'
+import { peopleMentioned, recentCaptured } from './lib/memory'
+import { possibleSteps } from './lib/possibleSteps'
 import { settleSummary } from './lib/settleSummary'
 import { isWaiting } from './lib/waiting'
 import { waitingLabel, waitingLoops } from './lib/waitingLoops'
@@ -26,7 +31,6 @@ import {
   briefIntro,
   dumpFromLocation,
   greetingForHour,
-  searchThoughts,
   splitDump,
   titleFromText,
 } from './lib/classify'
@@ -46,14 +50,14 @@ import { personDraft, personMessage } from './lib/personDraft'
 import { previewDraft } from './lib/preview'
 import { detectProjectHints, type ProjectHint } from './lib/projectHints'
 import { gentleInsights } from './lib/insights'
-import { looksLikeMindChanged, suggestedCategoryAfterEdit } from './lib/mindChanged'
+import { looksLikeMindChanged, suggestedCategoryAfterEdit, findSuperseded } from './lib/mindChanged'
 import { canShare, shareText } from './lib/share'
 import { exportJson, loadState, saveState, uid } from './lib/storage'
 import { fromSyncCode, mergeSyncState, toSyncCode } from './lib/syncCode'
 import { staleDays, staleSweep } from './lib/staleSweep'
 import './index.css'
 
-type View = 'brief' | 'all' | 'ask'
+type View = 'brief' | 'all'
 type ListFilter = Category | 'all' | 'due' | 'waiting'
 
 function formatWhen(iso: string): string {
@@ -68,6 +72,13 @@ function formatWhen(iso: string): string {
 function labelFor(category: Category): string {
   return CATEGORIES.find((c) => c.id === category)?.label ?? category
 }
+
+const SNOOZE_LABEL = {
+  tonight: 'Tonight',
+  tomorrow: 'Tomorrow',
+  weekend: 'Weekend',
+} as const
+const SNOOZE_KINDS = ['tonight', 'tomorrow', 'weekend'] as const
 
 function PineMark() {
   return (
@@ -101,7 +112,6 @@ export default function App() {
   const [view, setView] = useState<View>('brief')
   const [filter, setFilter] = useState<ListFilter>('all')
   const [query, setQuery] = useState('')
-  const [ask, setAsk] = useState('')
   const [hideDone, setHideDone] = useState(true)
   const [listening, setListening] = useState(false)
   const [filing, setFiling] = useState(false)
@@ -111,6 +121,8 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(() => loadSettings())
   const [canSpeak] = useState(() => speechSupported())
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<number, Category>>({})
+  const [echoChoice, setEchoChoice] = useState<Record<number, 'merge' | 'keep'>>({})
+  const [reviewLines, setReviewLines] = useState<string[] | null>(null)
   const [worryBatch, setWorryBatch] = useState<Thought[] | null>(null)
   const [reliefPulse, setReliefPulse] = useState(false)
   const [sweepQueue, setSweepQueue] = useState<Thought[]>([])
@@ -122,7 +134,10 @@ export default function App() {
   const recognizerRef = useRef<ReturnType<typeof createRecognizer>>(null)
   const interimRef = useRef('')
   const baseDraftRef = useRef('')
+  const voiceCapturedRef = useRef(false)
+  const reviewDraftRef = useRef<string | null>(null)
   const dumpShellRef = useRef<HTMLElement>(null)
+  const draftTextareaRef = useRef<HTMLTextAreaElement>(null)
   const projectSectionRef = useRef<HTMLDivElement>(null)
 
   const hour = new Date().getHours()
@@ -166,6 +181,24 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (settingsOpen) return
+    const desktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches
+    if (!desktop) return
+    const t = window.setTimeout(() => {
+      draftTextareaRef.current?.focus({ preventScroll: true })
+    }, 120)
+    return () => window.clearTimeout(t)
+  }, [settingsOpen])
+
+  useEffect(() => {
+    setClarifyAnswers({})
+    setEchoChoice({})
+    if (reviewDraftRef.current === draft) return
+    reviewDraftRef.current = null
+    setReviewLines(null)
+  }, [draft])
+
+  useEffect(() => {
     const { text, autoUnload } = dumpFromLocation(
       window.location.search,
       window.location.hash,
@@ -182,10 +215,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    setClarifyAnswers({})
-  }, [draft])
-
   const activeOpen = useMemo(
     () =>
       thoughts.filter(
@@ -194,7 +223,13 @@ export default function App() {
     [thoughts],
   )
 
+  useEffect(() => {
+    void setOpenLoopBadge(activeOpen.length)
+  }, [activeOpen.length])
+
   const waitingItems = useMemo(() => waitingLoops(thoughts), [thoughts])
+
+  const carriedOver = useMemo(() => carriedOverOpen(thoughts), [thoughts])
 
   const draftChunks = useMemo(
     () => (draft.trim() ? splitDump(draft) : []),
@@ -243,25 +278,27 @@ export default function App() {
     if (filter === 'waiting') list = list.filter((t) => t.status === 'waiting')
     else if (filter === 'due') list = list.filter((t) => Boolean(t.dueAt) && t.status === 'open')
     else if (filter !== 'all') list = list.filter((t) => t.category === filter)
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     if (q) {
-      list = list.filter(
-        (t) =>
-          t.title.toLowerCase().includes(q) ||
-          t.text.toLowerCase().includes(q) ||
-          (t.person ?? '').toLowerCase().includes(q),
-      )
+      const asked = localAsk(list, q, 40)
+      if (askSource === 'openai' && askHits.length) {
+        const allow = new Set(list.map((t) => t.id))
+        const semantic = askHits.filter((t) => allow.has(t.id))
+        if (semantic.length) {
+          const seen = new Set(semantic.map((t) => t.id))
+          list = [...semantic, ...asked.filter((t) => !seen.has(t.id))]
+        } else {
+          list = asked
+        }
+      } else {
+        list = asked
+      }
     }
     return list
-  }, [thoughts, filter, query, hideDone])
-
-  const askHitsLocal = useMemo(
-    () => searchThoughts(thoughts, ask),
-    [thoughts, ask],
-  )
+  }, [thoughts, filter, query, hideDone, askHits, askSource])
 
   useEffect(() => {
-    const q = ask.trim()
+    const q = query.trim()
     if (!q) {
       setAskHits([])
       setAskSource(null)
@@ -269,7 +306,7 @@ export default function App() {
       return
     }
 
-    const local = localAsk(thoughts, q)
+    const local = localAsk(thoughts, q, 40)
     setAskHits(local)
     setAskSource('local')
 
@@ -302,10 +339,11 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [ask, thoughts, settings.useAi, settings.filingToken])
+  }, [query, thoughts, settings.useAi, settings.filingToken])
 
   const projectHints = useMemo(() => detectProjectHints(thoughts), [thoughts])
   const insights = useMemo(() => gentleInsights(thoughts), [thoughts])
+  const recent = useMemo(() => recentCaptured(thoughts), [thoughts])
   const sweepCandidates = useMemo(() => brainSweepQueue(thoughts), [thoughts])
   const [canNativeShare] = useState(() => canShare())
 
@@ -357,6 +395,34 @@ export default function App() {
     }
   }
 
+  function focusDumpBox() {
+    dumpShellRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    window.setTimeout(() => draftTextareaRef.current?.focus(), 180)
+  }
+
+  function syncReviewLines(lines: string[]) {
+    const joined = lines.filter((l) => l.trim()).join('\n')
+    reviewDraftRef.current = joined
+    setReviewLines(lines)
+    setDraft(joined)
+  }
+
+  function openReviewFromDraft() {
+    const lines = splitDump(draft)
+    if (lines.length >= 2) syncReviewLines(lines)
+  }
+
+  function dismissReview() {
+    setReviewLines(null)
+  }
+
+  function effectiveDraft(): string {
+    if (reviewLines?.length) {
+      return reviewLines.filter((l) => l.trim()).join('\n')
+    }
+    return draft
+  }
+
   function flash(message: string) {
     setToast(message)
   }
@@ -383,9 +449,32 @@ export default function App() {
       }))
 
       const now = new Date().toISOString()
-      const created: Thought[] = filed.map((item) => {
+      const created: Thought[] = []
+      const merges: { id: string; patch: Partial<Thought> }[] = []
+
+      filed.forEach((item, index) => {
+        const echo = findEchoes(
+          item.text,
+          thoughts,
+          1,
+          settings.mutedPhrases,
+        )[0]
+        if (echo && echoChoice[index] === 'merge') {
+          merges.push({
+            id: echo.id,
+            patch: {
+              text: item.text,
+              title: item.title,
+              nextAction: item.nextAction,
+              dueAt: item.dueAt ?? echo.dueAt,
+              person: item.person ?? echo.person,
+              updatedAt: now,
+            },
+          })
+          return
+        }
         const waiting = isWaiting(item.text)
-        return {
+        created.push({
           id: uid(),
           text: item.text,
           title: item.title,
@@ -397,13 +486,26 @@ export default function App() {
           person: item.person,
           nextAction: item.nextAction,
           snoozeUntil: null,
-        }
+          confidence: item.confidence,
+          supersedesId:
+            echo && looksLikeMindChanged(echo.text, item.text)
+              ? echo.id
+              : findSuperseded(item.text, thoughts)?.id ?? null,
+        })
       })
 
-      setThoughts((prev) => [...created, ...prev])
+      setThoughts((prev) => {
+        const merged = prev.map((t) => {
+          const hit = merges.find((m) => m.id === t.id)
+          return hit ? { ...t, ...hit.patch } : t
+        })
+        return [...created, ...merged]
+      })
       setUndoIds(created.map((t) => t.id))
       setDraft('')
+      setReviewLines(null)
       setClarifyAnswers({})
+      setEchoChoice({})
       interimRef.current = ''
       baseDraftRef.current = ''
 
@@ -415,7 +517,10 @@ export default function App() {
         ),
       )
       const summary = settleSummary(created, ranked[0] ?? null)
-      flash(`${summary} · Undo`)
+      flash(
+        `${summary}${merges.length ? ` · merged ${merges.length}` : ''} · Undo`,
+      )
+      settleHaptic()
 
       setReliefPulse(true)
       window.setTimeout(() => setReliefPulse(false), 700)
@@ -447,7 +552,7 @@ export default function App() {
       flash('Answer the quick question first')
       return
     }
-    void unloadText(draft)
+    void unloadText(effectiveDraft())
   }
 
   function undoLast() {
@@ -484,19 +589,28 @@ export default function App() {
     if (listening) {
       recognizerRef.current?.stop()
       setListening(false)
+      const lines = splitDump(draft)
+      if (voiceCapturedRef.current && lines.length > 0) {
+        syncReviewLines(lines)
+        flash('Review your items, then Settle')
+      }
+      voiceCapturedRef.current = false
       return
     }
 
     baseDraftRef.current = draft
     interimRef.current = ''
+    voiceCapturedRef.current = false
 
     const rec = createRecognizer({
       onPartial: (text) => {
+        voiceCapturedRef.current = true
         interimRef.current = text
         const base = baseDraftRef.current
         setDraft(base ? `${base.trimEnd()} ${text}` : text)
       },
       onFinal: (text) => {
+        voiceCapturedRef.current = true
         const next = `${baseDraftRef.current} ${text}`.replace(/\s+/g, ' ').trim()
         baseDraftRef.current = next
         interimRef.current = ''
@@ -585,7 +699,13 @@ export default function App() {
     onRemove: removeThought,
     onSnooze: snooze,
     onFlash: flash,
+    onDump: (text: string) => {
+      setDraft(text)
+      dumpShellRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
     canShare: canNativeShare,
+    allThoughts: thoughts,
+    defaultSnooze: settings.defaultSnooze,
   }
 
   return (
@@ -611,7 +731,7 @@ export default function App() {
           </button>
         </div>
         <p className="tagline">
-          Dump anything. Filing, dates, and people get assigned for you.
+          You don&apos;t organize. Settle does. One box — next three — done.
         </p>
         <p className="session">{session}</p>
       </header>
@@ -622,9 +742,10 @@ export default function App() {
         ref={dumpShellRef}
       >
         <textarea
+          ref={draftTextareaRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Brain dump here… separate items with + or new lines. “text Sam tomorrow”, “buy oat milk today”."
+          placeholder="Get it off your mind… separate with + or new lines. “text Sam tomorrow”, “buy oat milk today”."
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
               e.preventDefault()
@@ -637,15 +758,22 @@ export default function App() {
         {draftPreview.length > 0 && (
           <div className="preview-row" aria-label="Filing preview">
             {draftPreview.map((item, i) => {
-              const echo = findEchoes(item.text, thoughts, 1)[0]
+              const echo = findEchoes(
+                item.text,
+                thoughts,
+                1,
+                settings.mutedPhrases,
+              )[0]
+              const low = item.confidence < 0.55
               return (
                 <span
                   key={`${i}-${item.text.slice(0, 24)}`}
-                  className={`preview-chip ${clarifyAnswers[i] ?? item.category}${echo ? ' has-echo' : ''}`}
+                  className={`preview-chip ${clarifyAnswers[i] ?? item.category}${echo ? ' has-echo' : ''}${low ? ' is-unsure' : ''}`}
                   title={item.text}
                 >
                   <span className="preview-cat">
                     {labelFor(clarifyAnswers[i] ?? item.category)}
+                    {low ? ' ?' : ''}
                   </span>
                   <span className="preview-title">{item.title}</span>
                   {item.person && (
@@ -664,6 +792,61 @@ export default function App() {
             })}
           </div>
         )}
+        {draftPreview.map((item, i) => {
+          const echo = findEchoes(
+            item.text,
+            thoughts,
+            1,
+            settings.mutedPhrases,
+          )[0]
+          if (!echo) return null
+          const n = mentionCount(item.text, thoughts)
+          const choice = echoChoice[i] ?? 'keep'
+          return (
+            <div key={`echo-${i}`} className="echo-card">
+              <p>
+                Sounds like “{echo.title}” from{' '}
+                {formatWhen(echo.createdAt)}
+                {n >= 3 ? ` · mentioned ${n} times` : ''}
+              </p>
+              <div className="echo-actions">
+                <button
+                  type="button"
+                  className={`clarify-btn${choice === 'merge' ? ' is-active' : ''}`}
+                  onClick={() =>
+                    setEchoChoice((prev) => ({ ...prev, [i]: 'merge' }))
+                  }
+                >
+                  Merge
+                </button>
+                <button
+                  type="button"
+                  className={`clarify-btn${choice === 'keep' ? ' is-active' : ''}`}
+                  onClick={() =>
+                    setEchoChoice((prev) => ({ ...prev, [i]: 'keep' }))
+                  }
+                >
+                  Keep both
+                </button>
+                <button
+                  type="button"
+                  className="clarify-btn"
+                  onClick={() =>
+                    setSettings((s) => ({
+                      ...s,
+                      mutedPhrases: [
+                        ...s.mutedPhrases.filter((p) => p !== echo.text),
+                        echo.text,
+                      ],
+                    }))
+                  }
+                >
+                  Never resurface
+                </button>
+              </div>
+            </div>
+          )
+        })}
         {clarifyPrompts.map((prompt) => (
           <div key={prompt.chunkIndex} className="clarify-card">
             <p className="clarify-q">{prompt.question}</p>
@@ -686,8 +869,61 @@ export default function App() {
             </div>
           </div>
         ))}
-        {draftPreview.some((item) => findEchoes(item.text, thoughts, 1)[0]) && (
-          <p className="echo-hint">Echo — you&apos;ve dumped something like this before</p>
+        {reviewLines && reviewLines.length > 0 && (
+          <div className="review-card" aria-label="Review before settle">
+            <div className="review-head">
+              <p className="kicker">Review items</p>
+              <p className="review-lead">
+                Edit or remove before Settle — nothing files until you confirm.
+              </p>
+            </div>
+            <ul className="review-list">
+              {reviewLines.map((line, i) => (
+                <li key={`review-${i}`}>
+                  <input
+                    type="text"
+                    className="review-input"
+                    value={line}
+                    aria-label={`Item ${i + 1}`}
+                    onChange={(e) => {
+                      const next = [...reviewLines]
+                      next[i] = e.target.value
+                      syncReviewLines(next)
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="review-remove"
+                    aria-label={`Remove item ${i + 1}`}
+                    onClick={() => {
+                      const next = reviewLines.filter((_, j) => j !== i)
+                      if (next.length) syncReviewLines(next)
+                      else dismissReview()
+                    }}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="review-actions">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={dismissReview}
+              >
+                Edit as text
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={filing || needsClarify}
+                onClick={unload}
+              >
+                Looks good — Settle
+              </button>
+            </div>
+          </div>
         )}
         <div className="dump-actions">
           <button
@@ -696,7 +932,7 @@ export default function App() {
             disabled={!draft.trim() || filing || needsClarify}
             onClick={unload}
           >
-            {filing ? 'Settling…' : 'Settle'}
+            {filing ? 'Settling…' : reviewLines?.length ? 'Settle all' : 'Settle'}
           </button>
           {canSpeak && (
             <button
@@ -706,11 +942,37 @@ export default function App() {
               onClick={toggleListen}
               disabled={filing}
             >
-              {listening ? 'Stop mic' : 'Speak'}
+              {listening ? "Stop — that's all" : 'Speak'}
+            </button>
+          )}
+          {!reviewLines && draftPreview.length >= 2 && (
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={openReviewFromDraft}
+            >
+              Review items ({draftPreview.length})
             </button>
           )}
         </div>
-        <p className="hint">⌘/Ctrl + Enter · local · learns when you recategorize</p>
+        <p className="hint">
+          {listening
+            ? 'Talk through everything, then tap Stop — review before Settle'
+            : '⌘/Ctrl + Enter · on-device · learns when you recategorize'}
+        </p>
+        {thoughts.length === 0 && !draft.trim() && (
+          <ol className="how-it-works" aria-label="How Settle works">
+            <li>
+              <strong>Dump</strong> — type or speak whatever&apos;s in your head
+            </li>
+            <li>
+              <strong>Settle</strong> — split, file, assign dates &amp; people
+            </li>
+            <li>
+              <strong>Next 3</strong> — pick what&apos;s worth doing today
+            </li>
+          </ol>
+        )}
       </section>
 
       <nav className="nav" aria-label="Views">
@@ -719,7 +981,7 @@ export default function App() {
           aria-current={view === 'brief' ? 'page' : undefined}
           onClick={() => setView('brief')}
         >
-          Today
+          Today{activeOpen.length > 0 ? ` (${activeOpen.length})` : ''}
         </button>
         <button
           type="button"
@@ -727,13 +989,6 @@ export default function App() {
           onClick={() => setView('all')}
         >
           All ({activeOpen.length})
-        </button>
-        <button
-          type="button"
-          aria-current={view === 'ask' ? 'page' : undefined}
-          onClick={() => setView('ask')}
-        >
-          Ask
         </button>
       </nav>
 
@@ -743,6 +998,34 @@ export default function App() {
             <p className="kicker">Daily brief</p>
             <h2>What now</h2>
             <p>{briefIntro(activeOpen.length)}</p>
+
+            {activeOpen.length >= 8 && sweepCandidates.length > 0 && (
+              <p className="inbox-nudge">
+                Inbox getting full — a quick brain sweep might help.
+              </p>
+            )}
+
+            {carriedOver.length > 0 && (
+              <div className="carried-section" aria-label="Carried over">
+                <div className="radar-head">
+                  <h3>Carried over</h3>
+                  <p>
+                    {carriedOver.length} open from before today — pick one or
+                    snooze the rest
+                  </p>
+                </div>
+                <ul className="recent-list">
+                  {carriedOver.slice(0, 4).map((t) => (
+                    <li key={t.id}>
+                      <span className={`cat-pill ${t.category}`}>
+                        {labelFor(t.category)}
+                      </span>
+                      {t.nextAction || t.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div ref={projectSectionRef}>
               <ProjectHintsPanel
@@ -758,6 +1041,25 @@ export default function App() {
                   <li key={item.id}>{item.text}</li>
                 ))}
               </ul>
+            )}
+
+            {recent.length > 0 && (
+              <div className="recent-section" aria-label="Recently captured">
+                <div className="radar-head">
+                  <h3>Last 24 hours</h3>
+                  <p>Just dumped — still warm</p>
+                </div>
+                <ul className="recent-list">
+                  {recent.slice(0, 5).map((t) => (
+                    <li key={t.id}>
+                      <span className={`cat-pill ${t.category}`}>
+                        {labelFor(t.category)}
+                      </span>
+                      {t.nextAction || t.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             {nextThree.length > 0 && (
@@ -954,7 +1256,7 @@ export default function App() {
             <div className="brief-sections">
               <BriefSection title="Do next" items={briefBuckets.do} empty="No errands filed yet." {...rowProps} />
               <BriefSection title="People" items={briefBuckets.people} empty="No people loops." {...rowProps} />
-              <BriefSection title="Parked worries" items={briefBuckets.worry} empty="Nothing heavy right now." {...rowProps} />
+              <BriefSection title="Parked worries" subtitle="Not a task. Just a loop to revisit." items={briefBuckets.worry} empty="Nothing heavy right now." {...rowProps} />
               <BriefSection title="Worth thinking" items={briefBuckets.think} empty="No open ideas." {...rowProps} />
             </div>
           </div>
@@ -969,8 +1271,8 @@ export default function App() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your dumps…"
-              aria-label="Search thoughts"
+              placeholder="Ask your dumps — Sam, passport, groceries…"
+              aria-label="Ask your dumps"
             />
             <button
               type="button"
@@ -981,6 +1283,10 @@ export default function App() {
               {hideDone ? 'Show done' : 'Hide done'}
             </button>
           </div>
+          {askLoading && <p className="thought-meta">Searching deeper…</p>}
+          {askSource === 'openai' && query.trim() && !askLoading && (
+            <p className="thought-meta">Smart match</p>
+          )}
           <div className="filter-row" role="toolbar" aria-label="Filter by type">
             <button
               type="button"
@@ -1035,46 +1341,8 @@ export default function App() {
         </section>
       )}
 
-      {view === 'ask' && (
-        <section className="panel" aria-label="Ask your dumps">
-          <div className="ask-card">
-            <p className="kicker">Ask your dumps</p>
-            <h2>What did I capture?</h2>
-            <p>Search people, errands, worries — no folders required.</p>
-            <input
-              type="search"
-              value={ask}
-              onChange={(e) => setAsk(e.target.value)}
-              placeholder="Sam, passport, groceries…"
-              aria-label="Ask your dumps"
-              autoFocus
-            />
-            {askLoading && <p className="thought-meta">Searching deeper…</p>}
-            {askSource === 'openai' && ask.trim() && !askLoading && (
-              <p className="thought-meta">Smart match</p>
-            )}
-            <div className="thought-list" style={{ marginTop: '0.9rem' }}>
-              {!ask.trim() ? (
-                <p className="thought-meta">Type a name or a scrap of a thought.</p>
-              ) : askHits.length === 0 && !askLoading ? (
-                <p className="thought-meta">Nothing matched.</p>
-              ) : (
-                askHits.map((t) => (
-                  <ThoughtRow key={t.id} thought={t} {...rowProps} />
-                ))
-              )}
-            </div>
-            {!settings.useAi && ask.trim() && askHitsLocal.length > askHits.length && (
-              <p className="thought-meta">
-                Enable smart filing in Settings for semantic Ask via /api/ask
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-
       <footer className="footer-bar">
-        <span>On-device · Add to Home Screen</span>
+        <span>On-device · badge shows open loops · Add to Home Screen</span>
         <div className="footer-actions">
           <a className="btn-ghost" href="/shortcuts">
             Shortcuts
@@ -1110,6 +1378,17 @@ export default function App() {
             </button>
           )}
         </div>
+      )}
+
+      {!settingsOpen && (
+        <button
+          type="button"
+          className="fab-dump"
+          aria-label="Dump something"
+          onClick={focusDumpBox}
+        >
+          +
+        </button>
       )}
 
       {settingsOpen && (
@@ -1202,6 +1481,7 @@ function SettingsModal({
 }) {
   const [syncPaste, setSyncPaste] = useState('')
   const [syncReplace, setSyncReplace] = useState(false)
+  const people = peopleMentioned(thoughts)
 
   async function copySyncCode() {
     const code = toSyncCode({ version: 2, thoughts, learned })
@@ -1280,6 +1560,23 @@ function SettingsModal({
           />
         </label>
 
+        <label className="field">
+          <span>Preferred snooze</span>
+          <select
+            value={settings.defaultSnooze}
+            onChange={(e) =>
+              onChange({
+                ...settings,
+                defaultSnooze: e.target.value as Settings['defaultSnooze'],
+              })
+            }
+          >
+            <option value="tonight">Tonight</option>
+            <option value="tomorrow">Tomorrow</option>
+            <option value="weekend">This weekend</option>
+          </select>
+        </label>
+
         <div className="sync-actions">
           <button
             type="button"
@@ -1338,8 +1635,8 @@ function SettingsModal({
           </code>
         </div>
 
-        <div className="sync-section">
-          <h3>Sync phone ↔ PC</h3>
+        <details className="sync-section">
+          <summary>Sync phone ↔ PC</summary>
           <p>
             Copy a code on one device, paste on the other. Default merges both
             sides — newer edits win on conflicts.
@@ -1375,7 +1672,12 @@ function SettingsModal({
           >
             Apply sync code
           </button>
-        </div>
+        </details>
+
+        <h3>What Settle knows</h3>
+        <p className="modal-lead">
+          Learned phrases, people, and muted echoes. All on this device.
+        </p>
 
         {learned.length > 0 && (
           <div className="learned-section">
@@ -1394,6 +1696,48 @@ function SettingsModal({
                     aria-label={`Forget ${rule.phrase}`}
                     onClick={() =>
                       onLearnedChange(learned.filter((r) => r.phrase !== rule.phrase))
+                    }
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {people.length > 0 && (
+          <div className="learned-section">
+            <h3>People Settle remembers</h3>
+            <p>From your dumps — names stay on this device.</p>
+            <ul className="learned-list">
+              {people.slice(0, 12).map((p) => (
+                <li key={p.person}>
+                  <span className="learned-phrase">{p.person}</span>
+                  <span className="thought-meta">{p.count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {settings.mutedPhrases.length > 0 && (
+          <div className="learned-section">
+            <h3>Never resurface</h3>
+            <p>Echoes skipped for these phrases.</p>
+            <ul className="learned-list">
+              {settings.mutedPhrases.map((phrase) => (
+                <li key={phrase}>
+                  <span className="learned-phrase">{phrase}</span>
+                  <button
+                    type="button"
+                    className="learned-remove"
+                    aria-label={`Resurface ${phrase}`}
+                    onClick={() =>
+                      onChange({
+                        ...settings,
+                        mutedPhrases: settings.mutedPhrases.filter((p) => p !== phrase),
+                      })
                     }
                   >
                     ×
@@ -1474,26 +1818,35 @@ function ProjectHintsPanel({
 
 function BriefSection({
   title,
+  subtitle,
   items,
   empty,
   onUpdate,
   onRemove,
   onSnooze,
   onFlash,
+  onDump,
   canShare: canShareProp,
+  allThoughts,
+  defaultSnooze,
 }: {
   title: string
+  subtitle?: string
   items: Thought[]
   empty: string
   onUpdate: (id: string, patch: Partial<Thought>) => void
   onRemove: (id: string) => void
   onSnooze: (id: string, kind: 'tonight' | 'tomorrow' | 'weekend') => void
   onFlash: (message: string) => void
+  onDump: (text: string) => void
   canShare: boolean
+  allThoughts: Thought[]
+  defaultSnooze: 'tonight' | 'tomorrow' | 'weekend'
 }) {
   return (
     <div className="brief-section">
       <h3>{title}</h3>
+      {subtitle && <p className="thought-meta section-sub">{subtitle}</p>}
       {items.length === 0 ? (
         <p className="thought-meta" style={{ margin: 0 }}>
           {empty}
@@ -1508,7 +1861,10 @@ function BriefSection({
               onRemove={onRemove}
               onSnooze={onSnooze}
               onFlash={onFlash}
+              onDump={onDump}
               canShare={canShareProp}
+              allThoughts={allThoughts}
+              defaultSnooze={defaultSnooze}
               compact
             />
           ))}
@@ -1524,7 +1880,10 @@ function ThoughtRow({
   onRemove,
   onSnooze,
   onFlash,
+  onDump,
   canShare: canShareProp,
+  allThoughts,
+  defaultSnooze,
   compact,
   style,
 }: {
@@ -1533,7 +1892,10 @@ function ThoughtRow({
   onRemove: (id: string) => void
   onSnooze: (id: string, kind: 'tonight' | 'tomorrow' | 'weekend') => void
   onFlash: (message: string) => void
+  onDump: (text: string) => void
   canShare: boolean
+  allThoughts: Thought[]
+  defaultSnooze: 'tonight' | 'tomorrow' | 'weekend'
   compact?: boolean
   style?: CSSProperties
 }) {
@@ -1571,6 +1933,12 @@ function ThoughtRow({
     }
   }
 
+  const steps = possibleSteps(thought)
+  const prior = thought.supersedesId
+    ? allThoughts.find((t) => t.id === thought.supersedesId)
+    : null
+  const mentions = mentionCount(thought.text, allThoughts)
+
   async function shareThought() {
     const ok = await shareText(
       thought.nextAction || thought.title,
@@ -1581,7 +1949,7 @@ function ThoughtRow({
 
   return (
     <article
-      className={`thought${thought.status === 'done' ? ' is-done' : ''}${thought.status === 'waiting' ? ' is-waiting' : ''}${overdue ? ' is-overdue' : ''}`}
+      className={`thought${thought.status === 'done' ? ' is-done' : ''}${thought.status === 'waiting' ? ' is-waiting' : ''}${thought.category === 'worry' ? ' is-worry' : ''}${overdue ? ' is-overdue' : ''}${thought.private ? ' is-private' : ''}`}
       style={style}
     >
       <div className="thought-top">
@@ -1618,10 +1986,19 @@ function ThoughtRow({
                 {thought.status === 'waiting' && (
                   <span className="chip waiting">Waiting</span>
                 )}
+                {thought.private && <span className="chip">Private</span>}
+                {mentions >= 3 && (
+                  <span className="chip echo">Mentioned {mentions}×</span>
+                )}
                 <span className="thought-meta" style={{ margin: 0 }}>
                   {formatWhen(thought.createdAt)}
                 </span>
               </div>
+              {prior && (
+                <p className="thought-meta">
+                  Replaces “{prior.title}” from {formatWhen(prior.createdAt)}
+                </p>
+              )}
             </>
           )}
         </div>
@@ -1654,6 +2031,23 @@ function ThoughtRow({
           </div>
         </div>
       )}
+      {steps.length > 0 && !editing && (
+        <details className="steps-card">
+          <summary>Possible steps</summary>
+          <div className="steps-actions">
+            {steps.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="done-mini"
+                onClick={() => onDump(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
       <div className="thought-actions">
         {editing ? (
           <>
@@ -1684,23 +2078,12 @@ function ThoughtRow({
             </button>
             {thought.status === 'open' && (
               <>
-                <button type="button" onClick={() => onSnooze(thought.id, 'tonight')}>
-                  Tonight
+                <button
+                  type="button"
+                  onClick={() => onSnooze(thought.id, defaultSnooze)}
+                >
+                  {SNOOZE_LABEL[defaultSnooze]}
                 </button>
-                <button type="button" onClick={() => onSnooze(thought.id, 'tomorrow')}>
-                  Tomorrow
-                </button>
-                <button type="button" onClick={() => onSnooze(thought.id, 'weekend')}>
-                  Weekend
-                </button>
-                {(thought.category === 'people' || thought.person) && (
-                  <button
-                    type="button"
-                    onClick={() => onUpdate(thought.id, { status: 'waiting' })}
-                  >
-                    Waiting
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() =>
@@ -1722,38 +2105,78 @@ function ThoughtRow({
             <button type="button" onClick={() => setEditing(true)}>
               Edit
             </button>
-            {thought.dueAt && (
-              <button
-                type="button"
-                onClick={() => {
-                  const ok = downloadIcs(thought)
-                  onFlash(ok ? 'Calendar file saved' : 'Could not export')
-                }}
-              >
-                Calendar
-              </button>
-            )}
-            {canShareProp && (
-              <button type="button" onClick={shareThought}>
-                Share
-              </button>
-            )}
-            <select
-              aria-label="Change category"
-              value={thought.category}
-              onChange={(e) =>
-                onUpdate(thought.id, { category: e.target.value as Category })
-              }
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-            <button type="button" onClick={() => onRemove(thought.id)}>
-              Delete
-            </button>
+            <details className="more-actions">
+              <summary aria-label="More actions">···</summary>
+              <div className="more-actions-list">
+                {thought.status === 'open' &&
+                  SNOOZE_KINDS.filter((k) => k !== defaultSnooze).map((kind) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => onSnooze(thought.id, kind)}
+                    >
+                      {SNOOZE_LABEL[kind]}
+                    </button>
+                  ))}
+                {thought.status === 'open' &&
+                  (thought.category === 'people' || thought.person) && (
+                    <button
+                      type="button"
+                      onClick={() => onUpdate(thought.id, { status: 'waiting' })}
+                    >
+                      Waiting
+                    </button>
+                  )}
+                {thought.category === 'think' && thought.status === 'open' && (
+                  <button
+                    type="button"
+                    onClick={() => onUpdate(thought.id, { status: 'done' })}
+                  >
+                    Decided
+                  </button>
+                )}
+                {thought.dueAt && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ok = downloadIcs(thought)
+                      onFlash(ok ? 'Calendar file saved' : 'Could not export')
+                    }}
+                  >
+                    Calendar
+                  </button>
+                )}
+                {canShareProp && (
+                  <button type="button" onClick={shareThought}>
+                    Share
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdate(thought.id, { private: !thought.private })
+                  }
+                >
+                  {thought.private ? 'Unhide' : 'Private'}
+                </button>
+                <select
+                  aria-label="Change category"
+                  value={thought.category}
+                  onChange={(e) =>
+                    onUpdate(thought.id, { category: e.target.value as Category })
+                  }
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" onClick={() => onRemove(thought.id)}>
+                  Delete
+                </button>
+              </div>
+            </details>
           </>
         )}
       </div>
