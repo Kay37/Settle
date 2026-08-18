@@ -29,8 +29,14 @@ import {
   searchThoughts,
   splitDump,
   titleFromText,
-  urgencyScore,
 } from './lib/classify'
+import { rankOpen } from './lib/rank'
+import { downloadIcs } from './lib/calendar'
+import {
+  enableReminders,
+  notifyDueThoughts,
+  remindersSupported,
+} from './lib/reminders'
 import { fileLocally, fileWithEndpoint } from './lib/fileThoughts'
 import { learnFromCorrection } from './lib/learn'
 import { loadSettings, saveSettings, type Settings } from './lib/settings'
@@ -61,32 +67,6 @@ function formatWhen(iso: string): string {
 
 function labelFor(category: Category): string {
   return CATEGORIES.find((c) => c.id === category)?.label ?? category
-}
-
-function thoughtScore(t: Thought): number {
-  let s = urgencyScore(t.text)
-  if (t.dueAt) {
-    const due = new Date(t.dueAt).getTime()
-    const now = Date.now()
-    if (due < now) s += 20
-    else {
-      const hours = (due - now) / 36e5
-      if (hours < 12) s += 12
-      else if (hours < 36) s += 6
-    }
-  }
-  if (t.category === 'do') s += 3
-  if (t.category === 'people') s += 2
-  if (t.category === 'later' || t.category === 'note') s -= 4
-  return s
-}
-
-function rankOpen(items: Thought[]): Thought[] {
-  return [...items].sort((a, b) => {
-    const u = thoughtScore(b) - thoughtScore(a)
-    if (u !== 0) return u
-    return b.createdAt.localeCompare(a.createdAt)
-  })
 }
 
 function PineMark() {
@@ -155,6 +135,18 @@ export default function App() {
   useEffect(() => {
     saveSettings(settings)
   }, [settings])
+
+  useEffect(() => {
+    if (!settings.reminders) return
+    void notifyDueThoughts(thoughts)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        void notifyDueThoughts(thoughts)
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [thoughts, settings.reminders])
 
   useEffect(() => {
     if (!toast) return
@@ -1087,6 +1079,9 @@ export default function App() {
           <a className="btn-ghost" href="/shortcuts">
             Shortcuts
           </a>
+          <a className="btn-ghost" href="/widget">
+            Widget
+          </a>
           <button type="button" className="btn-ghost" onClick={downloadBackup}>
             Export
           </button>
@@ -1257,6 +1252,31 @@ function SettingsModal({
             type="checkbox"
             checked={settings.useAi}
             onChange={(e) => onChange({ ...settings, useAi: e.target.checked })}
+          />
+        </label>
+
+        <label className="toggle-row">
+          <span>Remind me when something is due</span>
+          <input
+            type="checkbox"
+            checked={settings.reminders}
+            onChange={(e) => {
+              const on = e.target.checked
+              if (!on) {
+                onChange({ ...settings, reminders: false })
+                return
+              }
+              void enableReminders().then((ok) => {
+                onChange({ ...settings, reminders: ok })
+                onFlash(
+                  ok
+                    ? 'Due reminders on — works best from the Home Screen app'
+                    : remindersSupported()
+                      ? 'Notifications blocked'
+                      : 'Reminders not supported here',
+                )
+              })
+            }}
           />
         </label>
 
@@ -1702,6 +1722,17 @@ function ThoughtRow({
             <button type="button" onClick={() => setEditing(true)}>
               Edit
             </button>
+            {thought.dueAt && (
+              <button
+                type="button"
+                onClick={() => {
+                  const ok = downloadIcs(thought)
+                  onFlash(ok ? 'Calendar file saved' : 'Could not export')
+                }}
+              >
+                Calendar
+              </button>
+            )}
             {canShareProp && (
               <button type="button" onClick={shareThought}>
                 Share
