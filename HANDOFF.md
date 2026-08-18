@@ -104,6 +104,11 @@ src/lib/syncCode.ts         Base64 sync code for phone ↔ PC
 src/lib/classify.selftest.ts
 src/lib/features.selftest.ts
 public/pine-mark.svg        Same pine as lawn-co
+public/apple-touch-icon.png iOS home screen (180)
+public/icon-192.png         PWA icon
+public/icon-512.png         PWA icon
+api/file.ts                 Vercel filing endpoint (optional OpenAI)
+scripts/generate-icons.mjs  Regenerate PNG icons
 vercel.json                 Vite on Vercel
 ```
 
@@ -138,13 +143,13 @@ vercel.json                 Vite on Vercel
 
 ## Good next work
 
-1. **Vercel URL** so iPhone use doesn’t depend on a cloud-agent tunnel.
-2. ~~**Sync** (phone ↔ PC)~~ — **Done:** Settings → Copy / paste sync code.
-3. **Smarter filing** via a tiny Vercel/Cloudflare function (browser can’t call OpenAI directly).
-4. **Home Screen / Shortcuts** on the real domain.
-5. ~~**People radar**~~ — **Done:** Today view shows open people loops, stalest first.
-6. **Live preview** while typing — chips below dump box show filing before you Settle.
-7. Larger PWA icons (192 / 512 PNG) for a cleaner iOS icon.
+1. ~~**Vercel URL**~~ — connected; pushes to `main` auto-deploy.
+2. ~~**Sync** (phone ↔ PC)~~ — Settings → copy / paste sync code.
+3. ~~**Built-in filing**~~ — `POST /api/file` on Vercel; set `OPENAI_API_KEY` for LLM filing.
+4. **Home Screen / Shortcuts** on your production domain.
+5. ~~**People radar**~~ — Today view, stalest first.
+6. ~~**Live preview**~~ — chips below dump box.
+7. ~~**PWA icons**~~ — 180 / 192 / 512 PNG pine icons for iOS.
 
 ---
 

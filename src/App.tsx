@@ -845,7 +845,8 @@ function SettingsModal({
         <h2>Settings</h2>
         <p className="modal-lead">
           Everything stays on-device. Recategorizing a dump teaches Settle your
-          language. Optional remote filing needs your own endpoint.
+          language. On Vercel, built-in filing uses <code>/api/file</code> — add
+          an OpenAI key there for smarter sorting.
         </p>
 
         <label className="toggle-row">
@@ -857,12 +858,31 @@ function SettingsModal({
           />
         </label>
 
+        <div className="sync-actions">
+          <button
+            type="button"
+            className="btn-ghost light"
+            onClick={() =>
+              onChange({
+                ...settings,
+                useAi: true,
+                filingEndpoint:
+                  typeof window !== 'undefined'
+                    ? `${window.location.origin}/api/file`
+                    : '/api/file',
+              })
+            }
+          >
+            Use built-in /api/file
+          </button>
+        </div>
+
         <label className="field">
           <span>Filing endpoint URL</span>
           <input
             type="url"
             autoComplete="off"
-            placeholder="https://your-worker.example/file"
+            placeholder="/api/file or https://your-worker.example/file"
             value={settings.filingEndpoint}
             onChange={(e) =>
               onChange({ ...settings, filingEndpoint: e.target.value })

@@ -10,18 +10,21 @@
     "preview": "vite preview",
     "test:classify": "tsx src/lib/classify.selftest.ts",
     "test:features": "tsx src/lib/features.selftest.ts",
-    "test": "npm run test:classify && npm run test:features"
+    "test": "npm run test:classify && npm run test:features",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@vercel/node": "^5.3.21",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
     "oxlint": "^1.75.0",
+    "sharp": "^0.34.3",
     "tsx": "^4.23.12",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
