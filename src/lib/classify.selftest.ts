@@ -26,6 +26,13 @@ assert(applyLearned('passport renewal', [{ phrase: 'passport', category: 'do' }]
 
 const parts = splitDump('buy milk\ncall mom\nidea for the porch')
 assert(parts.length === 3, 'split lines')
+
+const plusParts = splitDump('hawaii flight + hawaii hotel')
+assert(plusParts.length === 2, 'split plus')
+assert(plusParts[0] === 'hawaii flight', 'plus part 1')
+assert(plusParts[1] === 'hawaii hotel', 'plus part 2')
+assert(classify('hawaii flight') === 'do', 'flight → do')
+assert(classify('hawaii hotel') === 'do', 'hotel → do')
 assert(titleFromText('a'.repeat(100)).endsWith('…'), 'title truncates')
 assert(urgencyScore('do this today asap') > urgencyScore('maybe someday'), 'urgency')
 

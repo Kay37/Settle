@@ -118,6 +118,12 @@ const clusterThoughts: Thought[] = [
 const hints = detectProjectHints(clusterThoughts, now)
 assert(hints.length >= 1, 'project hints')
 
+const shortTrip: Thought[] = [
+  { id: 't1', text: 'hawaii flight', title: 'Flight', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString() },
+  { id: 't2', text: 'hawaii hotel', title: 'Hotel', category: 'do', status: 'open', createdAt: now.toISOString(), updatedAt: now.toISOString() },
+]
+assert(detectProjectHints(shortTrip, now).length >= 1, 'trip hint from shared place')
+
 const sweep = brainSweepQueue(thoughts, 5, now)
 assert(Array.isArray(sweep), 'brain sweep queue')
 assert(typeof sweepDue() === 'boolean', 'sweep due')
