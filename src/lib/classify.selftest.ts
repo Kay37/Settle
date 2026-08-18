@@ -1,5 +1,6 @@
 import {
   classify,
+  classifyConfidence,
   dumpFromLocation,
   splitDump,
   titleFromText,
@@ -33,6 +34,7 @@ assert(plusParts[0] === 'hawaii flight', 'plus part 1')
 assert(plusParts[1] === 'hawaii hotel', 'plus part 2')
 assert(classify('hawaii flight') === 'do', 'flight → do')
 assert(classify('hawaii hotel') === 'do', 'hotel → do')
+assert(classifyConfidence('hawaii flight', 'do') > 0.5, 'flight confidence')
 assert(titleFromText('a'.repeat(100)).endsWith('…'), 'title truncates')
 assert(urgencyScore('do this today asap') > urgencyScore('maybe someday'), 'urgency')
 
@@ -54,5 +56,7 @@ assert(assign('buy oat milk today', now).dueAt !== null, 'today due')
 assert(parseDueAt('this weekend', now) !== null, 'this weekend')
 assert(parseDueAt('in 2 weeks', now) !== null, 'two weeks')
 assert(parseDueAt('before mom visit', now) !== null, 'before visit')
+const aug = parseDueAt('august 20', now)
+assert(aug !== null && aug.getMonth() === 7 && aug.getDate() === 20, 'month name')
 
 console.log('classify.selftest: all passed')
